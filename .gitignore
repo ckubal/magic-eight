@@ -1,0 +1,38 @@
+# Xcode
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+DerivedData/
+build/
+*.hmap
+*.ipa
+
+# Secrets and env (never commit)
+.env
+.env.*
+*.xcconfig
+*.pem
+*.p12
+*.mobileprovision
+Secrets/
+credentials/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*~
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods
+Pods/
+*.xcworkspace
+!default.xcworkspace
+
+# Temporary
+*.log
+*.tmp
+*.temp
