@@ -221,6 +221,20 @@ struct ContentView: View {
     @State private var revealRise: CGFloat = 1     // 0 = deep in the murk, 1 = surfaced
     @State private var burstTrigger = 0            // bump to fire a reveal burst
 
+    // Phase 4 — personality
+    @State private var isSassyReveal = false       // the ball talked back
+    @State private var glitchOverrideText: String? // non-nil while a reveal is "possessed"
+    @State private var showDailyBanner = false     // "fortune of the day"
+    @AppStorage("lastDailyFortuneDay") private var lastDailyFortuneDay = ""
+    private let sassyChance = 0.05                 // ~1 in 20
+    private let glitchChance = 0.06                // ~1 in 17
+
+    // Phase 5 — growth
+    @State private var translationText: String?    // same verdict, another era
+    @State private var translationSetName: String?
+    @State private var showShareSheet = false
+    @State private var shareImage: UIImage?
+
     init() {
         hapticGenerator.prepare()
     }
@@ -509,6 +523,104 @@ struct ContentView: View {
                 }
             }
 
+            // "Fortune of the day" ceremony (first flip each day)
+            if showDailyBanner && appState == .showingResponse && !showIntroScreen {
+                GeometryReader { proxy in
+                    VStack {
+                        Text("✦ fortune of the day ✦")
+                            .font(.system(size: 14, weight: .heavy, design: .rounded))
+                            .foregroundColor(Color(red: 1.0, green: 0.9, blue: 0.55))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule()
+                                    .fill(Color.black.opacity(0.6))
+                                    .overlay(
+                                        Capsule().stroke(
+                                            Color(red: 1.0, green: 0.85, blue: 0.4).opacity(0.7),
+                                            lineWidth: 1.5
+                                        )
+                                    )
+                            )
+                            .padding(.top, proxy.safeAreaInsets.top + 56)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+                .zIndex(7)
+            }
+
+            // Post-reveal actions: translate across eras + share receipt
+            if appState == .showingResponse && currentResponse != nil && !showIntroScreen {
+                GeometryReader { proxy in
+                    VStack(spacing: 10) {
+                        Spacer()
+
+                        // Cross-era translation result
+                        if let translated = translationText, let setName = translationSetName {
+                            VStack(spacing: 3) {
+                                Text(setName.lowercased())
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.65))
+                                Text("“\(translated.lowercased())”")
+                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule().fill(Color.black.opacity(0.65))
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
+                        HStack(spacing: 12) {
+                            if !isSassyReveal {
+                                Button(action: translateCurrentFortune) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.2.squarepath")
+                                            .font(.system(size: 13, weight: .bold))
+                                        Text("other eras")
+                                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    }
+                                    .foregroundColor(.white.opacity(0.92))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.black.opacity(0.42))
+                                            .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                    )
+                                }
+                            }
+
+                            Button(action: shareCurrentFortune) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 13, weight: .bold))
+                                    Text("share")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                }
+                                .foregroundColor(.white.opacity(0.92))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.black.opacity(0.42))
+                                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                )
+                            }
+                        }
+                        .padding(.bottom, proxy.safeAreaInsets.bottom + 22)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .opacity(responseOpacity)
+            }
+
             // Rare "shiny" fortune celebration
             if isShinyReveal && appState == .showingResponse && !showIntroScreen {
                 ShinyBurst()
@@ -544,6 +656,12 @@ struct ContentView: View {
             SettingsView(responseManager: responseManager) {
                 showIntroScreen = true
                 showSettings = false
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let image = shareImage {
+                ActivityShareSheet(items: [image])
+                    .presentationDetents([.medium, .large])
             }
         }
         .onChange(of: motionManager.isFaceDown) { _, isFaceDown in
@@ -597,7 +715,10 @@ struct ContentView: View {
                 }
             }
         } else if appState == .showingResponse, let response = currentResponse {
-            TriangleFittedText(text: response.text.uppercased(), opacity: responseOpacity)
+            TriangleFittedText(
+                text: (glitchOverrideText ?? response.text).uppercased(),
+                opacity: responseOpacity
+            )
                 // Surface from the depths: rise up, sharpen, settle.
                 .offset(y: (1 - revealRise) * triangleSize * 0.32)
                 .scaleEffect(0.72 + 0.28 * revealRise)
@@ -626,6 +747,63 @@ struct ContentView: View {
         default: return "shaking…"
         }
     }
+
+    /// "Possessed" reveal: show corrupted text that de-scrambles into the answer.
+    private func runGlitchResolve(for text: String, sequenceId: Int) {
+        let severities: [Double] = [0.9, 0.7, 0.45, 0.2]
+        glitchOverrideText = Personality.scramble(text, severity: severities[0])
+        for (i, severity) in severities.enumerated().dropFirst() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.13) {
+                guard self.flipSequenceId == sequenceId else { return }
+                self.glitchOverrideText = Personality.scramble(text, severity: severity)
+                self.hapticGenerator.impactOccurred(intensity: 0.5)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(severities.count) * 0.13) {
+            guard self.flipSequenceId == sequenceId else { return }
+            self.glitchOverrideText = nil
+        }
+    }
+
+    /// Clear the per-reveal extras (glitch text, translation, banners).
+    private func clearRevealExtras() {
+        glitchOverrideText = nil
+        translationText = nil
+        translationSetName = nil
+        isSassyReveal = false
+        showDailyBanner = false
+    }
+
+    /// Same verdict, different era — each tap pulls a fresh translation.
+    private func translateCurrentFortune() {
+        guard let response = currentResponse else { return }
+        guard let result = responseManager.translation(
+            matching: response.type,
+            excluding: responseManager.effectiveSetId
+        ) else { return }
+        hapticGenerator.impactOccurred(intensity: 0.5)
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            translationText = result.text
+            translationSetName = result.setName
+        }
+    }
+
+    /// Render the era-styled receipt and open the share sheet.
+    private func shareCurrentFortune() {
+        guard let response = currentResponse else { return }
+        let themeName = responseManager.availableSets
+            .first(where: { $0.id == responseManager.effectiveSetId })?.name
+            ?? responseManager.effectiveSetId
+        shareImage = FortuneReceiptRenderer.image(
+            themeName: themeName,
+            answer: response.text,
+            isShiny: isShinyReveal
+        )
+        if shareImage != nil {
+            hapticGenerator.impactOccurred(intensity: 0.5)
+            showShareSheet = true
+        }
+    }
     
     private func handleOrientationChange(wasFaceDown: Bool, isFaceDown: Bool) {
         if !wasFaceDown && isFaceDown {
@@ -643,6 +821,7 @@ struct ContentView: View {
             
             appState = .faceDown
             isShinyReveal = false
+            clearRevealExtras()
             hapticGenerator.prepare()
             hapticGenerator.impactOccurred()
             haptics.prepare()
@@ -720,8 +899,10 @@ struct ContentView: View {
                       self.appState == .loading else {
                     return
                 }
-                // Roll for a rare shiny fortune ✨
+                // Roll for a rare shiny fortune ✨ (sassy replies only when not shiny)
                 self.isShinyReveal = Double.random(in: 0...1) < self.shinyChance
+                self.isSassyReveal = !self.isShinyReveal
+                    && Double.random(in: 0...1) < self.sassyChance
                 if self.isShinyReveal {
                     self.shinyCount += 1
                     self.haptics.playShiny()
@@ -731,8 +912,33 @@ struct ContentView: View {
                     if self.soundEnabled { self.sound.play(for: self.responseManager.effectiveSetId) }
                 }
 
-                self.currentResponse = finalResponse
+                // The ball occasionally talks back instead of answering.
+                var shownResponse = finalResponse
+                if self.isSassyReveal {
+                    shownResponse = Response(
+                        text: Personality.sassyLine(for: self.responseManager.effectiveSetId),
+                        type: .neutral
+                    )
+                }
+
+                // First fortune of the calendar day gets a little ceremony.
+                let today = ISO8601DateFormatter.dayStamp()
+                if self.lastDailyFortuneDay != today {
+                    self.lastDailyFortuneDay = today
+                    self.showDailyBanner = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                        withAnimation(.easeOut(duration: 0.6)) { self.showDailyBanner = false }
+                    }
+                }
+
+                self.currentResponse = shownResponse
                 self.appState = .showingResponse
+
+                // Occasionally the reveal is "possessed": the text surfaces
+                // corrupted, then resolves to the real answer.
+                if !self.isShinyReveal && Double.random(in: 0...1) < self.glitchChance {
+                    self.runGlitchResolve(for: shownResponse.text, sequenceId: currentSequenceId)
+                }
 
                 // Liquid "float-up": the answer starts deep in the murk and
                 // buoyantly rises/sharpens into view.
@@ -868,6 +1074,7 @@ struct ContentView: View {
         currentResponse = nil
         preloadedResponse = nil
         hasPreloadedForCurrentFlip = false
+        clearRevealExtras()
         
         loadingOpacity = 0.0
         responseOpacity = 0.0
