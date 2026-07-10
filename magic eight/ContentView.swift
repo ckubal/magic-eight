@@ -208,7 +208,13 @@ struct ContentView: View {
     private let sphereEdgeInset: CGFloat = 0.98
     
     private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
-    
+    private let haptics = HapticManager()
+
+    // Rare "shiny" fortunes ✨
+    @State private var isShinyReveal = false
+    @AppStorage("shinyFortuneCount") private var shinyCount = 0
+    private let shinyChance = 0.015  // ~1 in 67
+
     init() {
         hapticGenerator.prepare()
     }
@@ -336,7 +342,8 @@ struct ContentView: View {
                     if appState == .loading || (appState == .showingResponse && currentResponse != nil) {
                         TriangleWindow(
                             size: triangleSize,
-                            offset: constrainedOffset
+                            offset: constrainedOffset,
+                            isShiny: isShinyReveal && appState == .showingResponse
                         ) {
                             triangleContent(triangleSize: triangleSize)
                         }
@@ -438,6 +445,25 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
+            // Rare "shiny" fortune celebration
+            if isShinyReveal && appState == .showingResponse && !showIntroScreen {
+                ShinyBurst()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                    .zIndex(5)
+                VStack {
+                    Spacer()
+                    Text("✨ rare fortune  ·  #\(shinyCount) ✨")
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundColor(Color(red: 1.0, green: 0.9, blue: 0.55))
+                        .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 2)
+                        .padding(.bottom, 90)
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+                .zIndex(6)
+            }
+
             if showIntroScreen {
                 NostalgicIntroView(cyclingThemeSetId: introBackgroundSetId) {
                     stopIntroBackgroundCycler()
@@ -529,8 +555,10 @@ struct ContentView: View {
             let currentSequenceId = flipSequenceId
             
             appState = .faceDown
+            isShinyReveal = false
             hapticGenerator.prepare()
             hapticGenerator.impactOccurred()
+            haptics.prepare()
             
             // Only preload if we haven't already for this flip cycle
             if !hasPreloadedForCurrentFlip {
@@ -605,9 +633,18 @@ struct ContentView: View {
                       self.appState == .loading else {
                     return
                 }
+                // Roll for a rare shiny fortune ✨
+                self.isShinyReveal = Double.random(in: 0...1) < self.shinyChance
+                if self.isShinyReveal {
+                    self.shinyCount += 1
+                    self.haptics.playShiny()
+                } else {
+                    self.haptics.play(for: self.responseManager.effectiveSetId)
+                }
+
                 self.currentResponse = finalResponse
                 self.appState = .showingResponse
-                
+
                 // Fade out loading, fade in response in one animation
                 withAnimation(.easeIn(duration: 0.5)) {
                     self.loadingOpacity = 0.0
@@ -1768,21 +1805,26 @@ private struct WallpaperRecipe {
 struct TriangleWindow: View {
     let size: CGFloat
     let offset: CGSize
+    let isShiny: Bool
     let content: AnyView
-    
-    init<Content: View>(size: CGFloat, offset: CGSize, @ViewBuilder content: () -> Content) {
+
+    init<Content: View>(size: CGFloat, offset: CGSize, isShiny: Bool = false, @ViewBuilder content: () -> Content) {
         self.size = size
         self.offset = offset
+        self.isShiny = isShiny
         self.content = AnyView(content())
     }
-    
+
+    private var glowColor: Color {
+        isShiny ? Color(red: 1.0, green: 0.82, blue: 0.25) : Color(red: 0.2, green: 0.6, blue: 1.0)
+    }
+
     // Static gradients for better performance
     private var triangleGradient: LinearGradient {
         LinearGradient(
-            gradient: Gradient(colors: [
-                Color(red: 0.2, green: 0.6, blue: 1.0),
-                Color(red: 0.1, green: 0.4, blue: 0.9)
-            ]),
+            gradient: Gradient(colors: isShiny
+                ? [Color(red: 1.0, green: 0.88, blue: 0.4), Color(red: 0.95, green: 0.65, blue: 0.1)]
+                : [Color(red: 0.2, green: 0.6, blue: 1.0), Color(red: 0.1, green: 0.4, blue: 0.9)]),
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -1849,7 +1891,7 @@ struct TriangleWindow: View {
                         .blur(radius: 2)
                         .frame(width: size, height: size)
                 )
-                .shadow(color: Color(red: 0.2, green: 0.6, blue: 1.0).opacity(0.5), radius: 8, x: 0, y: 0)
+                .shadow(color: glowColor.opacity(isShiny ? 0.9 : 0.5), radius: isShiny ? 16 : 8, x: 0, y: 0)
                 .offset(offset)
             
             // Content inside triangle:
@@ -1873,6 +1915,48 @@ struct TriangleWindow: View {
         .frame(width: containerSize, height: containerSize)
         // DO NOT use .clipped() here - it creates rectangular clipping
         .contentShape(Rectangle()) // Allow hit testing on full container
+    }
+}
+
+/// A one-shot golden sparkle burst shown when a rare "shiny" fortune appears.
+struct ShinyBurst: View {
+    @State private var animate = false
+    private let sparkleCount = 14
+
+    var body: some View {
+        GeometryReader { geo in
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let reach = min(geo.size.width, geo.size.height) * 0.5
+
+            ZStack {
+                // Expanding golden ring pulse
+                Circle()
+                    .stroke(Color(red: 1.0, green: 0.85, blue: 0.35), lineWidth: 3)
+                    .frame(width: reach * 1.4, height: reach * 1.4)
+                    .scaleEffect(animate ? 1.25 : 0.2)
+                    .opacity(animate ? 0 : 0.9)
+                    .position(center)
+
+                // Radiating sparkles
+                ForEach(0..<sparkleCount, id: \.self) { i in
+                    let angle = Double(i) / Double(sparkleCount) * 2 * .pi
+                    let dist = reach * (animate ? 1.0 : 0.05)
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(Color(red: 1.0, green: 0.9, blue: 0.5))
+                        .shadow(color: Color(red: 1.0, green: 0.8, blue: 0.2).opacity(0.8), radius: 6)
+                        .scaleEffect(animate ? 0.4 : 1.1)
+                        .opacity(animate ? 0 : 1)
+                        .position(
+                            x: center.x + CGFloat(cos(angle)) * dist,
+                            y: center.y + CGFloat(sin(angle)) * dist
+                        )
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.1)) { animate = true }
+        }
     }
 }
 
