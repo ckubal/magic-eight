@@ -217,6 +217,10 @@ struct ContentView: View {
     @AppStorage("shinyFortuneCount") private var shinyCount = 0
     private let shinyChance = 0.015  // ~1 in 67
 
+    // Phase 3 — dramatic reveal
+    @State private var revealRise: CGFloat = 1     // 0 = deep in the murk, 1 = surfaced
+    @State private var burstTrigger = 0            // bump to fire a reveal burst
+
     init() {
         hapticGenerator.prepare()
     }
@@ -447,6 +451,35 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
+            // Per-era reveal burst (decorative particles)
+            if !showIntroScreen {
+                RevealBurst(
+                    style: BurstStyle.forTheme(responseManager.effectiveSetId),
+                    trigger: burstTrigger,
+                    intense: isShinyReveal
+                )
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            }
+
+            // Era-flavored loading caption
+            if appState == .loading && !showIntroScreen {
+                GeometryReader { geometry in
+                    VStack {
+                        Spacer()
+                        Text(loadingPhrase(for: responseManager.effectiveSetId))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(Capsule().fill(Color.black.opacity(0.6)))
+                            .padding(.bottom, geometry.safeAreaInsets.bottom + 28)
+                            .opacity(loadingOpacity)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+            }
+
             // Sound on/off toggle (top-right, safe-area aware)
             if !showIntroScreen {
                 GeometryReader { proxy in
@@ -565,9 +598,32 @@ struct ContentView: View {
             }
         } else if appState == .showingResponse, let response = currentResponse {
             TriangleFittedText(text: response.text.uppercased(), opacity: responseOpacity)
+                // Surface from the depths: rise up, sharpen, settle.
+                .offset(y: (1 - revealRise) * triangleSize * 0.32)
+                .scaleEffect(0.72 + 0.28 * revealRise)
+                .blur(radius: (1 - revealRise) * 3.5)
         } else {
             // Empty state - show nothing
             EmptyView()
+        }
+    }
+
+    /// Era-flavored "summoning" line shown while the fortune loads.
+    private func loadingPhrase(for themeId: String) -> String {
+        switch themeId {
+        case "aimy2k", "facebook2008", "myspace2005": return "connecting… 56k"
+        case "matrix": return "decrypting…"
+        case "tiktok2020", "twitterx2024": return "buffering…"
+        case "deviantart2006": return "rendering…"
+        case "shakespearean": return "consulting the muses…"
+        case "harrypotter": return "casting…"
+        case "boomers1958": return "dialing the operator…"
+        case "genx": return "rewinding the tape…"
+        case "nbajam", "sportscenter": return "reviewing the replay…"
+        case "huntersthompson": return "chasing the vision…"
+        case "genalpha", "genz": return "manifesting…"
+        case "millennial", "tumblr2012", "xanga2002": return "loading vibes…"
+        default: return "shaking…"
         }
     }
     
@@ -677,6 +733,15 @@ struct ContentView: View {
 
                 self.currentResponse = finalResponse
                 self.appState = .showingResponse
+
+                // Liquid "float-up": the answer starts deep in the murk and
+                // buoyantly rises/sharpens into view.
+                self.revealRise = 0.0
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.62)) {
+                    self.revealRise = 1.0
+                }
+                // Fire the theme's reveal burst.
+                self.burstTrigger += 1
 
                 // Fade out loading, fade in response in one animation
                 withAnimation(.easeIn(duration: 0.5)) {
