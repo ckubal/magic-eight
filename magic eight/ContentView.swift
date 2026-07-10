@@ -209,6 +209,8 @@ struct ContentView: View {
     
     private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
     private let haptics = HapticManager()
+    private let sound = SoundManager()
+    @AppStorage("soundEnabled") private var soundEnabled = true
 
     // Rare "shiny" fortunes ✨
     @State private var isShinyReveal = false
@@ -445,6 +447,35 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
+            // Sound on/off toggle (top-right, safe-area aware)
+            if !showIntroScreen {
+                GeometryReader { proxy in
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                soundEnabled.toggle()
+                                hapticGenerator.impactOccurred(intensity: 0.4)
+                            }) {
+                                Image(systemName: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.92))
+                                    .frame(width: 38, height: 38)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.black.opacity(0.42))
+                                            .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                    )
+                            }
+                            .padding(.trailing, 16)
+                        }
+                        .padding(.top, proxy.safeAreaInsets.top + 8)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+
             // Rare "shiny" fortune celebration
             if isShinyReveal && appState == .showingResponse && !showIntroScreen {
                 ShinyBurst()
@@ -638,8 +669,10 @@ struct ContentView: View {
                 if self.isShinyReveal {
                     self.shinyCount += 1
                     self.haptics.playShiny()
+                    if self.soundEnabled { self.sound.playShiny() }
                 } else {
                     self.haptics.play(for: self.responseManager.effectiveSetId)
+                    if self.soundEnabled { self.sound.play(for: self.responseManager.effectiveSetId) }
                 }
 
                 self.currentResponse = finalResponse
