@@ -235,6 +235,19 @@ struct ContentView: View {
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
 
+    // Phase 6 — decade dial + settle-it mode + skins
+    @State private var showThemeDial = false
+    @State private var showSettleIt = false
+    @AppStorage("ballSkin") private var ballSkinRaw = "classic"
+    @AppStorage("screenFXEnabled") private var screenFXEnabled = true
+
+    // Phase 6.5 — fog mode (opt-in): blow to fog the glass, rub to wipe.
+    @AppStorage("fogModeEnabled") private var fogModeEnabled = false
+    @State private var blowDetector = BlowDetector()
+    @State private var fogAmount: Double = 0
+    @State private var fogWipes: [CGPoint] = []
+    @State private var fogGeneration = 0
+
     init() {
         hapticGenerator.prepare()
     }
@@ -291,21 +304,9 @@ struct ContentView: View {
                 )
                 
                 ZStack {
-                    // Sphere gradient (dark blue to black) - more realistic Magic 8 Ball colors
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                gradient: Gradient(colors: [
-                                    Color(red: 0.15, green: 0.15, blue: 0.35),
-                                    Color(red: 0.08, green: 0.08, blue: 0.2),
-                                    Color(red: 0.02, green: 0.02, blue: 0.08),
-                                    Color.black
-                                ]),
-                                center: UnitPoint(x: 0.3, y: 0.3),
-                                startRadius: size * 0.2,
-                                endRadius: size * 0.9
-                            )
-                        )
+                    // Sphere base — drawn by the selected collectible skin.
+                    (BallSkin(rawValue: ballSkinRaw) ?? .classic)
+                        .sphere(size: size)
                         .frame(width: size, height: size)
                         .overlay(
                             // Subtle highlight for 3D effect
@@ -428,7 +429,8 @@ struct ContentView: View {
                                     .fill(Color.black.opacity(0.72))
                             )
                             .padding(.horizontal, 32)
-                            .padding(.bottom, geometry.safeAreaInsets.bottom + 24)
+                            // Sits above the bottom-left "settle it" pill.
+                            .padding(.bottom, geometry.safeAreaInsets.bottom + 68)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .opacity(initialHintOpacity)
@@ -436,15 +438,19 @@ struct ContentView: View {
             }
             
             // Theme selector (safe-area aware so it stays below Dynamic Island).
+            // Tapping the pill opens the decade dial; the gear opens full settings.
             GeometryReader { proxy in
-                VStack {
+                VStack(spacing: 10) {
                     Button(action: {
-                        showSettings = true
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                            showThemeDial.toggle()
+                        }
+                        hapticGenerator.impactOccurred(intensity: 0.4)
                     }) {
                         HStack(spacing: 8) {
                             Text(selectedThemeName)
                                 .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            Image(systemName: "chevron.down")
+                            Image(systemName: showThemeDial ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 12, weight: .bold))
                         }
                         .foregroundColor(.white.opacity(0.92))
@@ -460,9 +466,49 @@ struct ContentView: View {
                         )
                     }
                     .padding(.top, proxy.safeAreaInsets.top + 8)
+
+                    if showThemeDial {
+                        DecadeDial(
+                            themes: responseManager.availableSets.map {
+                                DialTheme(id: $0.id, emoji: $0.emoji, name: $0.name)
+                            },
+                            currentId: responseManager.effectiveSetId,
+                            onSelect: { id in
+                                responseManager.selectedSetId = id
+                            }
+                        )
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // Settings gear (top-left, mirrors the sound toggle)
+            if !showIntroScreen {
+                GeometryReader { proxy in
+                    VStack {
+                        HStack {
+                            Button(action: { showSettings = true }) {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.92))
+                                    .frame(width: 38, height: 38)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.black.opacity(0.42))
+                                            .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                    )
+                            }
+                            .padding(.leading, 16)
+                            Spacer()
+                        }
+                        .padding(.top, proxy.safeAreaInsets.top + 8)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             
             // Per-era reveal burst (decorative particles)
@@ -491,6 +537,40 @@ struct ContentView: View {
                             .opacity(loadingOpacity)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+            }
+
+            // "Settle it" mode entry (bottom-left corner)
+            if !showIntroScreen && appState != .showingResponse {
+                GeometryReader { proxy in
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Button(action: {
+                                hapticGenerator.impactOccurred(intensity: 0.5)
+                                showSettleIt = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Text("⚖️")
+                                        .font(.system(size: 14))
+                                    Text("settle it")
+                                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                                }
+                                .foregroundColor(.white.opacity(0.92))
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 9)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.black.opacity(0.42))
+                                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                )
+                            }
+                            .padding(.leading, 16)
+                            Spacer()
+                        }
+                        .padding(.bottom, proxy.safeAreaInsets.bottom + 10)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
 
@@ -640,6 +720,19 @@ struct ContentView: View {
                 .zIndex(6)
             }
 
+            // Fog mode: breath condensation you rub away (under the scanlines).
+            if fogModeEnabled && fogAmount > 0.01 && !showIntroScreen {
+                FogOverlay(fogAmount: $fogAmount, wipes: $fogWipes)
+                    .zIndex(8)
+            }
+
+            // Era-authentic screen treatment (CRT/VHS/LCD), above everything
+            // visual but below the intro; purely decorative.
+            if screenFXEnabled && !showIntroScreen {
+                ScreenFXOverlay(fx: ScreenFX.forTheme(responseManager.effectiveSetId))
+                    .zIndex(9)
+            }
+
             if showIntroScreen {
                 NostalgicIntroView(cyclingThemeSetId: introBackgroundSetId) {
                     stopIntroBackgroundCycler()
@@ -662,6 +755,16 @@ struct ContentView: View {
             if let image = shareImage {
                 ActivityShareSheet(items: [image])
                     .presentationDetents([.medium, .large])
+            }
+        }
+        .fullScreenCover(isPresented: $showSettleIt) {
+            SettleItView(
+                themeSetId: responseManager.effectiveSetId,
+                soundEnabled: soundEnabled,
+                sound: sound,
+                haptics: haptics
+            ) {
+                showSettleIt = false
             }
         }
         .onChange(of: motionManager.isFaceDown) { _, isFaceDown in
@@ -691,7 +794,16 @@ struct ContentView: View {
                 startMainBackgroundDriftIfNeeded()
             }
         }
+        .onChange(of: fogModeEnabled) { _, enabled in
+            if enabled { blowDetector.start() } else {
+                blowDetector.stop()
+                fogAmount = 0
+                fogWipes = []
+            }
+        }
         .onAppear {
+            blowDetector.onBlow = { handleBlow() }
+            if fogModeEnabled { blowDetector.start() }
             introBackgroundSetId = randomThemeSetId()
             if !showIntroScreen {
                 startInitialHintPulseIfNeeded()
@@ -765,6 +877,31 @@ struct ContentView: View {
         }
     }
 
+    /// Blow detected → the glass fogs up; rubbing (FogOverlay) wipes it clear.
+    /// The fog also slowly evaporates on its own.
+    private func handleBlow() {
+        guard fogModeEnabled, !showIntroScreen, appState != .faceDown else { return }
+        fogGeneration += 1
+        let generation = fogGeneration
+
+        fogWipes = []
+        hapticGenerator.impactOccurred(intensity: 0.6)
+        withAnimation(.easeIn(duration: 0.9)) {
+            fogAmount = 1.0
+        }
+        // Evaporate after a while unless a fresh blow re-fogged the glass.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
+            guard self.fogGeneration == generation else { return }
+            withAnimation(.linear(duration: 5.0)) {
+                self.fogAmount = 0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.2) {
+                guard self.fogGeneration == generation else { return }
+                self.fogWipes = []
+            }
+        }
+    }
+
     /// Clear the per-reveal extras (glitch text, translation, banners).
     private func clearRevealExtras() {
         glitchOverrideText = nil
@@ -822,6 +959,7 @@ struct ContentView: View {
             appState = .faceDown
             isShinyReveal = false
             clearRevealExtras()
+            showThemeDial = false
             hapticGenerator.prepare()
             hapticGenerator.impactOccurred()
             haptics.prepare()

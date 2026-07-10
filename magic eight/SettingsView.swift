@@ -5,12 +5,36 @@
 //  Created by Charlie Kubal on 12/1/25.
 //
 
+import AVFoundation
 import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var responseManager: ResponseManager
     @Environment(\.dismiss) var dismiss
     var onReturnToOpening: (() -> Void)? = nil
+    @AppStorage("ballSkin") private var ballSkinRaw = "classic"
+    @AppStorage("shinyFortuneCount") private var shinyCount = 0
+    @AppStorage("screenFXEnabled") private var screenFXEnabled = true
+    @AppStorage("fogModeEnabled") private var fogModeEnabled = false
+
+    /// Fog mode is opt-in and needs the microphone: request permission on
+    /// enable, and only keep the toggle on if it's granted.
+    private var fogModeBinding: Binding<Bool> {
+        Binding(
+            get: { fogModeEnabled },
+            set: { wantsOn in
+                guard wantsOn else {
+                    fogModeEnabled = false
+                    return
+                }
+                AVAudioApplication.requestRecordPermission { granted in
+                    DispatchQueue.main.async {
+                        fogModeEnabled = granted
+                    }
+                }
+            }
+        )
+    }
     
     private let privacyPolicyURLString = "https://weirdlittleideas.com/magic-eight/privacy.html"
     private let termsOfUseURLString = "https://weirdlittleideas.com/magic-eight/tos.html"
@@ -130,6 +154,67 @@ struct SettingsView: View {
                     }
                 }
                 
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 18) {
+                            ForEach(BallSkin.allCases) { skin in
+                                let unlocked = skin.isUnlocked(shinyCount: shinyCount)
+                                Button(action: {
+                                    guard unlocked else { return }
+                                    ballSkinRaw = skin.rawValue
+                                }) {
+                                    VStack(spacing: 6) {
+                                        skin.sphere(size: 52)
+                                            .frame(width: 52, height: 52)
+                                            .overlay(
+                                                Circle().stroke(
+                                                    ballSkinRaw == skin.rawValue ? Color.blue : Color.clear,
+                                                    lineWidth: 3
+                                                )
+                                            )
+                                            .overlay {
+                                                if !unlocked {
+                                                    Circle().fill(Color.black.opacity(0.55))
+                                                    Image(systemName: "lock.fill")
+                                                        .font(.system(size: 16, weight: .bold))
+                                                        .foregroundColor(.white.opacity(0.9))
+                                                }
+                                            }
+                                        Text(unlocked ? skin.title : "\(skin.requiredShinies)✨")
+                                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                            .foregroundColor(ballSkinRaw == skin.rawValue ? .primary : .secondary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                } header: {
+                    Text("ball skin")
+                } footer: {
+                    Text("locked skins open up as you collect rare shiny fortunes (\(shinyCount) found so far).")
+                }
+
+                Section {
+                    Toggle(isOn: $screenFXEnabled) {
+                        HStack {
+                            Text("📺")
+                            Text("retro screen effects")
+                        }
+                    }
+                    Toggle(isOn: fogModeBinding) {
+                        HStack {
+                            Text("🌬️")
+                            Text("fog mode")
+                        }
+                    }
+                } header: {
+                    Text("extras")
+                } footer: {
+                    Text("retro screen effects add era-authentic scanlines, tape grain, and pixel grids. fog mode uses the microphone to notice when you blow on the screen — the glass fogs up and you rub it clear with your finger. audio is never recorded or stored.")
+                }
+
                 if onReturnToOpening != nil {
                     Section {
                         Button(action: {
