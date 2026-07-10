@@ -200,6 +200,8 @@ struct ContentView: View {
     @State private var introThemeCycler: AnyCancellable?
     @State private var mainBackgroundOffset = CGSize(width: -8, height: -6)
     @State private var mainBackgroundScale: CGFloat = 1.0
+    // Gentle parallax driven by device tilt so the wallpaper feels alive.
+    @State private var mainParallax = CGSize.zero
     @State private var currentSphereSize: CGFloat = 0
     
     /// Sphere touches the sides of the screen; diameter = full width (with tiny margin).
@@ -225,7 +227,10 @@ struct ContentView: View {
         ZStack {
             ThemeWallpaperView(setId: showIntroScreen ? introBackgroundSetId : responseManager.effectiveSetId)
                 .scaleEffect(showIntroScreen ? 1.0 : mainBackgroundScale)
-                .offset(showIntroScreen ? .zero : mainBackgroundOffset)
+                .offset(
+                    x: showIntroScreen ? 0 : mainBackgroundOffset.width + mainParallax.width,
+                    y: showIntroScreen ? 0 : mainBackgroundOffset.height + mainParallax.height
+                )
                 .animation(.easeInOut(duration: 0.6), value: introBackgroundSetId)
                 .animation(.easeInOut(duration: 0.45), value: responseManager.effectiveSetId)
                 .animation(.easeInOut(duration: 14.0), value: mainBackgroundOffset)
@@ -459,8 +464,9 @@ struct ContentView: View {
         .onReceive(motionManager.throttledShakeIntensity) { intensity in
             updateBubbleEffect(intensity: intensity)
         }
-        .onReceive(Publishers.CombineLatest(motionManager.throttledTiltX, motionManager.throttledTiltY)) { _, _ in
+        .onReceive(Publishers.CombineLatest(motionManager.throttledTiltX, motionManager.throttledTiltY)) { tiltX, tiltY in
             updateGravityEffect()
+            updateBackgroundParallax(tiltX: tiltX, tiltY: tiltY)
         }
         .onChange(of: responseManager.selectedSetId) {
             resetForThemeChange()
@@ -648,13 +654,19 @@ struct ContentView: View {
             return
         }
         
+        // Base overscan gives the float + parallax room to move without exposing edges.
+        mainBackgroundScale = 1.07
         retargetMainBackgroundDrift(animated: false)
-        
-        withAnimation(.easeInOut(duration: 14.0).repeatForever(autoreverses: true)) {
-            mainBackgroundScale = 1.03
+
+        // Slow "breathing" zoom on its own cadence...
+        withAnimation(.easeInOut(duration: 11.0).repeatForever(autoreverses: true)) {
+            mainBackgroundScale = 1.11
+        }
+        // ...and a gentle wandering drift on a different cadence so it feels organic.
+        withAnimation(.easeInOut(duration: 16.0).repeatForever(autoreverses: true)) {
             mainBackgroundOffset = CGSize(
-                width: CGFloat.random(in: -14...14),
-                height: CGFloat.random(in: -10...10)
+                width: CGFloat.random(in: -18...18),
+                height: CGFloat.random(in: -12...12)
             )
         }
     }
@@ -678,6 +690,27 @@ struct ContentView: View {
             }
         } else {
             mainBackgroundOffset = nextOffset
+        }
+    }
+
+    /// Subtle tilt parallax so the wallpaper drifts as the phone is held/turned.
+    /// Kept small and inside the base overscan so no edges are ever exposed.
+    private func updateBackgroundParallax(tiltX: Double, tiltY: Double) {
+        guard !showIntroScreen, !reduceMotion else {
+            if mainParallax != .zero {
+                withAnimation(.easeOut(duration: 0.4)) { mainParallax = .zero }
+            }
+            return
+        }
+
+        let maxX: CGFloat = 20
+        let maxY: CGFloat = 10
+        let target = CGSize(
+            width: max(-maxX, min(maxX, CGFloat(tiltX) * 26)),
+            height: max(-maxY, min(maxY, CGFloat(tiltY) * 14))
+        )
+        withAnimation(.easeOut(duration: 0.35)) {
+            mainParallax = target
         }
     }
     
