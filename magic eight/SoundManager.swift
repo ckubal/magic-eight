@@ -31,7 +31,9 @@ final class SoundManager {
     }
 
     func play(for themeId: String) {
-        play(named: SoundManager.cue(for: themeId))
+        // Prefer a per-theme cue ("cue-<id>.wav"); fall back to the shared vibe
+        // cue, then a default — so swapping in unique files "just works".
+        playFirstAvailable(["cue-\(themeId)", SoundManager.cue(for: themeId), "knock"])
     }
 
     func playShiny() {
@@ -63,5 +65,19 @@ final class SoundManager {
         guard let p = player(named: name) else { return }
         p.currentTime = 0
         p.play()
+    }
+
+    /// Play the first candidate cue that exists in the bundle.
+    private func playFirstAvailable(_ names: [String]) {
+        for name in names where bundleHasCue(name) {
+            play(named: name)
+            return
+        }
+    }
+
+    private func bundleHasCue(_ name: String) -> Bool {
+        if players[name] != nil { return true }
+        return Bundle.main.url(forResource: name, withExtension: "wav") != nil
+            || Bundle.main.url(forResource: name, withExtension: "wav", subdirectory: "Sounds") != nil
     }
 }
