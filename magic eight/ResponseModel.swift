@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Response: Codable, Identifiable {
+nonisolated struct Response: Codable, Identifiable {
     let id: UUID
     let text: String
     let type: ResponseType
@@ -47,12 +47,12 @@ struct Response: Codable, Identifiable {
 }
 
 // Remote response structure (without id)
-struct RemoteResponse: Codable {
+nonisolated struct RemoteResponse: Codable {
     let text: String
     let type: Response.ResponseType
 }
 
-struct ResponseData: Codable {
+nonisolated struct ResponseData: Codable {
     let responses: [RemoteResponse]
 }
 
@@ -72,13 +72,13 @@ struct ResponseSet: Identifiable {
 }
 
 // Remote response set structure
-struct RemoteResponseSet: Codable {
+nonisolated struct RemoteResponseSet: Codable {
     let id: String
     let name: String
     let responses: [RemoteResponse]
 }
 
-struct RemoteResponseData: Codable {
+nonisolated struct RemoteResponseData: Codable {
     let sets: [RemoteResponseSet]
 }
 

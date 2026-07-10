@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var responseManager: ResponseManager
     @Environment(\.dismiss) var dismiss
+    var onReturnToOpening: (() -> Void)? = nil
     
     private let privacyPolicyURLString = "https://weirdlittleideas.com/magic-eight/privacy.html"
     private let termsOfUseURLString = "https://weirdlittleideas.com/magic-eight/tos.html"
@@ -84,6 +85,25 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             List {
+                Section {
+                    Button(action: {
+                        responseManager.selectedSetId = "random"
+                        dismiss()
+                    }) {
+                        HStack {
+                            Text("🎲")
+                                .font(.title2)
+                            Text("random")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if responseManager.selectedSetId == "random" {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                }
+                
                 ForEach(categoryDisplayOrder, id: \.self) { category in
                     let sets = orderedSets(for: category)
                     if !sets.isEmpty {
@@ -105,6 +125,23 @@ struct SettingsView: View {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+                
+                if onReturnToOpening != nil {
+                    Section {
+                        Button(action: {
+                            onReturnToOpening?()
+                            dismiss()
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 15, weight: .regular))
+                                    .foregroundColor(.secondary)
+                                Text("return to opening")
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
@@ -159,6 +196,6 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(responseManager: ResponseManager())
+    SettingsView(responseManager: ResponseManager(), onReturnToOpening: nil)
 }
 

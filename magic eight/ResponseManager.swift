@@ -18,6 +18,17 @@ class ResponseManager: ObservableObject {
         }
     }
     
+    /// When selectedSetId == "random", this holds the currently resolved theme for wallpaper and responses.
+    @Published var randomResolvedSetId: String?
+    
+    /// Theme id used for wallpaper and responses; when "random" is selected, equals randomResolvedSetId.
+    var effectiveSetId: String {
+        if selectedSetId == "random" {
+            return randomResolvedSetId ?? availableSets.randomElement()?.id ?? "classic"
+        }
+        return selectedSetId
+    }
+    
     private let remoteURL = "https://www.weirdlittleideas.com/builds/magiceight/responses.json"
     private var remoteSetsCache: [String: RemoteResponseSet] = [:]
     
@@ -115,11 +126,21 @@ class ResponseManager: ObservableObject {
     }
     
     private func loadSelectedSet() {
-        if let selectedSet = availableSets.first(where: { $0.id == selectedSetId }) {
+        if selectedSetId == "random" {
+            let pickable = availableSets.filter { $0.id != "random" }
+            guard let chosen = pickable.randomElement() else {
+                responses = availableSets.first?.responses ?? []
+                randomResolvedSetId = nil
+                return
+            }
+            randomResolvedSetId = chosen.id
+            responses = chosen.responses
+        } else if let selectedSet = availableSets.first(where: { $0.id == selectedSetId }) {
             responses = selectedSet.responses
+            randomResolvedSetId = nil
         } else {
-            // Fallback to classic
             responses = availableSets.first?.responses ?? []
+            randomResolvedSetId = nil
         }
     }
     
@@ -130,7 +151,7 @@ class ResponseManager: ObservableObject {
         URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
             guard let self = self else { return }
             
-            if let error = error {
+            if error != nil {
                 return // Silently fail
             }
             

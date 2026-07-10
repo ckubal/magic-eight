@@ -47,10 +47,10 @@ struct TriangleFittedText: View {
                 .onAppear {
                     recalculateLayout(for: geometry.size)
                 }
-                .onChange(of: text) { _ in
+                .onChange(of: text) {
                     recalculateLayout(for: geometry.size)
                 }
-                .onChange(of: geometry.size) { newSize in
+                .onChange(of: geometry.size) { _, newSize in
                     recalculateLayout(for: newSize)
                 }
         }
@@ -195,16 +195,15 @@ struct ContentView: View {
     @State private var initialHintOpacity: Double = 0.0
     @State private var hasPreloadedForCurrentFlip = false
     @State private var flipSequenceId: Int = 0 // Track flip cycles to cancel stale operations
-    @State private var showIntroScreen = true
+    @State private var showIntroScreen = !ProcessInfo.processInfo.arguments.contains("-skipIntro")
     @State private var introBackgroundSetId = "classic"
     @State private var introThemeCycler: AnyCancellable?
     @State private var mainBackgroundOffset = CGSize(width: -8, height: -6)
     @State private var mainBackgroundScale: CGFloat = 1.0
     @State private var currentSphereSize: CGFloat = 0
     
-    private let sphereWidthFactor: CGFloat = 0.82
-    private let sphereHeightFactor: CGFloat = 0.56
-    private let sphereScaleAdjustment: CGFloat = 0.93 // 7% smaller
+    /// Sphere touches the sides of the screen; diameter = full width (with tiny margin).
+    private let sphereEdgeInset: CGFloat = 0.98
     
     private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
     
@@ -213,19 +212,22 @@ struct ContentView: View {
     }
     
     private var selectedThemeName: String {
-        responseManager.availableSets
-            .first(where: { $0.id == responseManager.selectedSetId })?
+        if responseManager.selectedSetId == "random" {
+            return "random"
+        }
+        return responseManager.availableSets
+            .first(where: { $0.id == responseManager.effectiveSetId })?
             .name
             .lowercased() ?? "classic"
     }
     
     var body: some View {
         ZStack {
-            ThemeWallpaperView(setId: showIntroScreen ? introBackgroundSetId : responseManager.selectedSetId)
+            ThemeWallpaperView(setId: showIntroScreen ? introBackgroundSetId : responseManager.effectiveSetId)
                 .scaleEffect(showIntroScreen ? 1.0 : mainBackgroundScale)
                 .offset(showIntroScreen ? .zero : mainBackgroundOffset)
                 .animation(.easeInOut(duration: 0.6), value: introBackgroundSetId)
-                .animation(.easeInOut(duration: 0.45), value: responseManager.selectedSetId)
+                .animation(.easeInOut(duration: 0.45), value: responseManager.effectiveSetId)
                 .animation(.easeInOut(duration: 14.0), value: mainBackgroundOffset)
                 .animation(.easeInOut(duration: 14.0), value: mainBackgroundScale)
                 .ignoresSafeArea()
@@ -373,24 +375,30 @@ struct ContentView: View {
                 .onAppear {
                     currentSphereSize = size
                 }
-                .onChange(of: geometry.size) { newSize in
+                .onChange(of: geometry.size) { _, newSize in
                     currentSphereSize = sphereDiameter(for: newSize)
                 }
             }
             
-            // Initial hint above circle (fades in at start)
+            // Initial hint at bottom (readable on any theme; over 8-ball area when no fortune)
             if !hasFlippedOnce && !showIntroScreen && currentResponse == nil && appState != .loading {
                 GeometryReader { geometry in
                     VStack {
-                        Text("think of a question and shake your phone to reveal the answer")
-                            .font(.system(size: 14, weight: .light, design: .default))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                            .padding(.top, 80)
                         Spacer()
+                        Text("think of a question and flip your phone over to reveal the answer")
+                            .font(.system(size: 15, weight: .medium, design: .default))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(
+                                Capsule()
+                                    .fill(Color.black.opacity(0.72))
+                            )
+                            .padding(.horizontal, 32)
+                            .padding(.bottom, geometry.safeAreaInsets.bottom + 24)
                     }
-                    .frame(width: geometry.size.width)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                     .opacity(initialHintOpacity)
                 }
             }
@@ -438,9 +446,12 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView(responseManager: responseManager)
+            SettingsView(responseManager: responseManager) {
+                showIntroScreen = true
+                showSettings = false
+            }
         }
-        .onChange(of: motionManager.isFaceDown) { isFaceDown in
+        .onChange(of: motionManager.isFaceDown) { _, isFaceDown in
             let wasFaceDown = previousFaceDownState
             previousFaceDownState = isFaceDown
             handleOrientationChange(wasFaceDown: wasFaceDown, isFaceDown: isFaceDown)
@@ -451,11 +462,14 @@ struct ContentView: View {
         .onReceive(Publishers.CombineLatest(motionManager.throttledTiltX, motionManager.throttledTiltY)) { _, _ in
             updateGravityEffect()
         }
-        .onChange(of: responseManager.selectedSetId) { _ in
+        .onChange(of: responseManager.selectedSetId) {
             resetForThemeChange()
             retargetMainBackgroundDrift(animated: true)
         }
-        .onChange(of: showIntroScreen) { isShowingIntro in
+        .onChange(of: responseManager.effectiveSetId) {
+            retargetMainBackgroundDrift(animated: true)
+        }
+        .onChange(of: showIntroScreen) { _, isShowingIntro in
             if isShowingIntro {
                 startIntroBackgroundCyclerIfNeeded()
             } else {
@@ -842,15 +856,19 @@ struct ContentView: View {
     }
     
     private func sphereDiameter(for containerSize: CGSize) -> CGFloat {
-        // Stable, theme-independent sizing shared across all themes/layouts.
-        min(containerSize.width * sphereWidthFactor, containerSize.height * sphereHeightFactor) * sphereScaleAdjustment
+        // Sphere touches left/right edges; use full width (with optional inset).
+        let width = containerSize.width * sphereEdgeInset
+        let maxByHeight = containerSize.height
+        return min(width, maxByHeight)
     }
     
     private var effectiveSphereSize: CGFloat {
         if currentSphereSize > 0 {
             return currentSphereSize
         }
-        let screen = UIScreen.main.bounds.size
+        let screen = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.screen.bounds.size ?? CGSize(width: 393, height: 852)
         return sphereDiameter(for: screen)
     }
 }
@@ -862,13 +880,13 @@ struct NostalgicIntroView: View {
     @State private var isPulsingCTA = false
     @State private var isTilted = false
     @State private var backgroundOffset = CGSize(width: -18, height: -12)
-    @State private var backgroundScale: CGFloat = 1.1
+    @State private var backgroundScale: CGFloat = 1.0
     @State private var backgroundRotation: Double = -1.2
     
     var body: some View {
         ZStack {
             ThemeWallpaperView(setId: cyclingThemeSetId)
-                .scaleEffect(backgroundScale)
+                .scaleEffect(backgroundScale * ThemeBackgroundLayout.motionOverscan)
                 .rotationEffect(.degrees(backgroundRotation))
                 .offset(backgroundOffset)
                 .ignoresSafeArea()
@@ -962,7 +980,7 @@ struct NostalgicIntroView: View {
                         .shadow(color: .black.opacity(0.35), radius: 4, x: 0, y: 3)
                         .multilineTextAlignment(.center)
                     
-                    Text("ask a question. shake for an answer.")
+                    Text("ask a question. flip over for an answer.")
                         .font(.system(size: 19, weight: .bold, design: .rounded))
                         .foregroundColor(Color(red: 0.98, green: 0.94, blue: 0.7))
                         .multilineTextAlignment(.center)
@@ -1012,14 +1030,14 @@ struct NostalgicIntroView: View {
             .padding(.horizontal, 28)
             .padding(.vertical, 36)
         }
-        .onChange(of: cyclingThemeSetId) { _ in
+        .onChange(of: cyclingThemeSetId) {
             retargetBackdropMotion(animated: true)
         }
         .onAppear {
             retargetBackdropMotion(animated: false)
             
             withAnimation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true)) {
-                backgroundScale = 1.16
+                backgroundScale = 1.03
             }
             withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
                 isFloating = true
@@ -1061,6 +1079,11 @@ struct ThemeWallpaperView: View {
     }
 }
 
+private enum ThemeBackgroundLayout {
+    /// Extra headroom so intro drift/rotation never exposes empty edges.
+    static let motionOverscan: CGFloat = 1.08
+}
+
 private struct StickerWord: View {
     let text: String
     let tint: Color
@@ -1086,32 +1109,24 @@ private struct StickerWord: View {
 private struct ThemeReferenceBackdrop: View {
     let setId: String
     
-    /// Design at 25–40% of former size so background is heavily zoomed out with small details.
-    private let designScale: CGFloat = 0.32
-    
     var body: some View {
-        ZStack {
+        GeometryReader { geo in
             if let assetName = referenceAssetName {
-                // Blurred fill for letterbox so edges are soft, not empty
+                // The theme art is full-bleed portrait, so a plain aspect-fill
+                // covers the whole screen (top, bottom, sides) on every iPhone,
+                // cropping only the small amount needed for the device aspect.
                 Image(assetName)
                     .resizable()
                     .scaledToFill()
-                    .blur(radius: 24)
-                    .saturation(0.92)
-                    .opacity(0.94)
-                    .ignoresSafeArea()
-                // Sharp image zoomed out so UI/text elements are ~25–40% smaller
-                Image(assetName)
-                    .resizable()
-                    .scaledToFill()
-                    .scaleEffect(designScale)
-                    .saturation(0.96)
-                    .contrast(1.04)
-                    .opacity(0.96)
-                    .overlay(Color.black.opacity(0.12))
-                    .ignoresSafeArea()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                    .saturation(0.98)
+                    .contrast(1.03)
+            } else {
+                Color.black
             }
         }
+        .ignoresSafeArea()
     }
     
     private var referenceAssetName: String? {
