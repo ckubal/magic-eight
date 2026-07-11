@@ -229,9 +229,7 @@ struct ContentView: View {
     private let sassyChance = 0.05                 // ~1 in 20
     private let glitchChance = 0.06                // ~1 in 17
 
-    // Phase 5 — growth
-    @State private var showShareSheet = false
-    @State private var shareImage: UIImage?
+    // Phase 5 — growth (share sheet is presented directly from UIKit)
 
     // Phase 6 — decade dial + settle-it mode + skins
     @State private var showThemeDial = false
@@ -695,12 +693,6 @@ struct ContentView: View {
                 showSettings = false
             }
         }
-        .sheet(isPresented: $showShareSheet) {
-            if let image = shareImage {
-                ActivityShareSheet(items: [image])
-                    .presentationDetents([.medium, .large])
-            }
-        }
         .fullScreenCover(isPresented: $showSettleIt) {
             SettleItView(
                 themeSetId: responseManager.effectiveSetId,
@@ -819,20 +811,22 @@ struct ContentView: View {
         showDailyBanner = false
     }
 
-    /// Render the era-styled receipt and open the share sheet.
+    /// Render the era-styled receipt and open the system share sheet.
     private func shareCurrentFortune() {
         guard let response = currentResponse else { return }
         let themeName = responseManager.availableSets
             .first(where: { $0.id == responseManager.effectiveSetId })?.name
             ?? responseManager.effectiveSetId
-        shareImage = FortuneReceiptRenderer.image(
+        guard let image = FortuneReceiptRenderer.image(
             themeName: themeName,
             answer: response.text,
             isShiny: isShinyReveal
-        )
-        if shareImage != nil {
-            hapticGenerator.impactOccurred(intensity: 0.5)
-            showShareSheet = true
+        ) else { return }
+        hapticGenerator.impactOccurred(intensity: 0.5)
+        // Present directly from UIKit (not nested in a SwiftUI sheet, which
+        // renders the activity controller blank).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            ShareSheetPresenter.present([image, "my magic eight fortune 🎱"])
         }
     }
     

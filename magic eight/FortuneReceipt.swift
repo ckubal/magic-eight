@@ -131,13 +131,27 @@ enum FortuneReceiptRenderer {
     }
 }
 
-/// Minimal share-sheet wrapper.
-struct ActivityShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
+enum ShareSheetPresenter {
+    /// Present the system share sheet directly from the top-most view
+    /// controller. Presenting UIActivityViewController this way avoids the
+    /// blank-sheet bug you hit when it's nested inside a SwiftUI `.sheet`.
+    @MainActor
+    static func present(_ items: [Any]) {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        guard let root = (scene?.keyWindow ?? scene?.windows.first)?.rootViewController else { return }
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+
+        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        // iPad needs a popover anchor.
+        if let pop = vc.popoverPresentationController {
+            pop.sourceView = top.view
+            pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY - 60, width: 0, height: 0)
+            pop.permittedArrowDirections = []
+        }
+        top.present(vc, animated: true)
     }
-
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
