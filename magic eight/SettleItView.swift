@@ -2,9 +2,9 @@
 //  SettleItView.swift
 //  magic eight
 //
-//  Phase 6.2 — "settle it": a separate pass-and-play mode for ending
-//  arguments. Add 2–4 options, the ball spins through them slot-machine
-//  style, and delivers a final verdict. Tap-driven (no flipping needed).
+//  Phase 6.2 — "settle it": a pass-and-play mode for ending arguments.
+//  Type 2–4 choices; the magic 8-ball itself spins through them slot-machine
+//  style inside its triangle window and lands on a verdict. Tap-driven.
 //
 
 import SwiftUI
@@ -17,17 +17,14 @@ struct SettleItView: View {
     let haptics: HapticManager
     let onClose: () -> Void
 
-    private enum Stage {
-        case input
-        case deciding
-        case verdict
-    }
+    private enum Stage { case input, deciding, verdict }
 
     @State private var stage: Stage = .input
     @State private var options: [String] = ["", ""]
-    @State private var spotlight: Int = 0          // option currently lit while deciding
+    @State private var spotlight = 0
     @State private var winnerIndex: Int?
     @State private var burstTrigger = 0
+    @State private var ballWobble = false
     @FocusState private var focusedField: Int?
 
     private let tick = UIImpactFeedbackGenerator(style: .rigid)
@@ -36,41 +33,116 @@ struct SettleItView: View {
         options.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
-    var body: some View {
-        ZStack {
-            ThemeWallpaperView(setId: themeSetId)
-                .ignoresSafeArea()
-            LinearGradient(
-                colors: [Color.black.opacity(0.55), Color.black.opacity(0.75)],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 22) {
-                header
-
-                switch stage {
-                case .input: inputStage
-                case .deciding: decidingStage
-                case .verdict: verdictStage
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 14)
-
-            RevealBurst(style: .confetti, trigger: burstTrigger, intense: true)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+    /// What the ball's triangle currently reads.
+    private var triangleText: String {
+        switch stage {
+        case .input:
+            return "?"
+        case .deciding:
+            let opts = validOptions
+            return opts.isEmpty ? "?" : opts[spotlight % opts.count]
+        case .verdict:
+            if let winnerIndex, winnerIndex < validOptions.count { return validOptions[winnerIndex] }
+            return "?"
         }
-        .onTapGesture { focusedField = nil }
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let ballSize = min(geo.size.width * 0.62, 240)
+            ZStack {
+                // Deep 8-ball-colored backdrop — cohesive and readable, with a
+                // faint, heavily darkened wash of the current theme for flavor.
+                Color.black.ignoresSafeArea()
+                ThemeWallpaperView(setId: themeSetId)
+                    .blur(radius: 40)
+                    .opacity(0.18)
+                    .ignoresSafeArea()
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.10, blue: 0.26),
+                        Color(red: 0.03, green: 0.03, blue: 0.10),
+                        .black,
+                    ],
+                    center: .center,
+                    startRadius: 30,
+                    endRadius: 620
+                )
+                .opacity(0.94)
+                .ignoresSafeArea()
+
+                VStack(spacing: 18) {
+                    header
+
+                    eightBall(size: ballSize)
+                        .padding(.vertical, stage == .input ? 2 : 8)
+
+                    Group {
+                        switch stage {
+                        case .input: inputStage
+                        case .deciding: decidingStage
+                        case .verdict: verdictStage
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                RevealBurst(style: .confetti, trigger: burstTrigger, intense: true)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { focusedField = nil }
+        }
+    }
+
+    // MARK: - The 8-ball
+
+    private func eightBall(size: CGFloat) -> some View {
+        let tri = size * 0.5
+        return ZStack {
+            BallSkin.classic.sphere(size: size)
+                .overlay(
+                    Circle().fill(
+                        RadialGradient(
+                            colors: [Color.white.opacity(0.14), .clear],
+                            center: UnitPoint(x: 0.32, y: 0.28),
+                            startRadius: size * 0.04,
+                            endRadius: size * 0.5
+                        )
+                    )
+                )
+                .frame(width: size, height: size)
+                .shadow(color: .black.opacity(0.5), radius: 22, x: 0, y: 12)
+
+            if stage != .input {
+                TriangleWindow(size: tri, offset: .zero) {
+                    TriangleFittedText(text: triangleText.uppercased(), opacity: 1)
+                }
+            } else {
+                Text("?")
+                    .font(.system(size: size * 0.28, weight: .black, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+        }
+        .frame(width: size, height: size)
+        .rotationEffect(.degrees(ballWobble ? 2.5 : -2.5))
+        .animation(
+            stage == .deciding
+                ? .easeInOut(duration: 0.12).repeatForever(autoreverses: true)
+                : .default,
+            value: ballWobble
+        )
     }
 
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             HStack {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
@@ -83,13 +155,13 @@ struct SettleItView: View {
             }
 
             Text("⚖️ settle it")
-                .font(.system(size: 34, weight: .black, design: .rounded))
+                .font(.system(size: stage == .input ? 30 : 24, weight: .black, design: .rounded))
                 .foregroundColor(.white)
 
             if stage == .input {
-                Text("can't agree? type the choices.\nthe ball decides — its verdict is final.")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.75))
+                Text("can't agree? type the choices —\nthe ball's verdict is final.")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.72))
                     .multilineTextAlignment(.center)
             }
         }
@@ -98,33 +170,40 @@ struct SettleItView: View {
     // MARK: - Input
 
     private var inputStage: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             ForEach(options.indices, id: \.self) { i in
                 HStack(spacing: 10) {
-                    TextField("option \(i + 1)  (e.g. pizza)", text: $options[i])
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .focused($focusedField, equals: i)
-                        .submitLabel(i == options.count - 1 ? .done : .next)
-                        .onSubmit {
-                            focusedField = i < options.count - 1 ? i + 1 : nil
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 13)
-                        .background(
-                            Capsule()
-                                .fill(Color.white.opacity(0.12))
-                                .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 1))
-                        )
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.16)).frame(width: 30, height: 30)
+                        Text("\(i + 1)")
+                            .font(.system(size: 14, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                    TextField("", text: $options[i], prompt:
+                        Text(i == 0 ? "e.g. pizza" : (i == 1 ? "e.g. tacos" : "another option"))
+                            .foregroundColor(.white.opacity(0.4))
+                    )
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .focused($focusedField, equals: i)
+                    .submitLabel(i == options.count - 1 ? .done : .next)
+                    .onSubmit { focusedField = i < options.count - 1 ? i + 1 : nil }
 
                     if options.count > 2 {
                         Button(action: { options.remove(at: i) }) {
                             Image(systemName: "minus.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundColor(.white.opacity(0.55))
+                                .foregroundColor(.white.opacity(0.5))
                         }
                     }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(
+                    Capsule()
+                        .fill(Color.white.opacity(0.1))
+                        .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1))
+                )
             }
 
             if options.count < 4 {
@@ -133,78 +212,50 @@ struct SettleItView: View {
                     focusedField = options.count - 1
                 }) {
                     Label("add option", systemImage: "plus.circle.fill")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundColor(.white.opacity(0.8))
                 }
                 .padding(.top, 2)
             }
 
             Button(action: startDeciding) {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                    Text("let the ball decide")
-                        .font(.system(size: 20, weight: .black, design: .rounded))
-                    Image(systemName: "sparkles")
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 26)
-                .padding(.vertical, 15)
-                .background(
-                    Capsule().fill(
-                        LinearGradient(
-                            colors: validOptions.count >= 2
-                                ? [Color(red: 0.95, green: 0.3, blue: 0.5), Color(red: 1.0, green: 0.6, blue: 0.2)]
-                                : [Color.gray.opacity(0.5), Color.gray.opacity(0.4)],
-                            startPoint: .leading, endPoint: .trailing
+                Text("ask the ball")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 15)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: validOptions.count >= 2
+                                    ? [Color(red: 0.95, green: 0.3, blue: 0.5), Color(red: 1.0, green: 0.6, blue: 0.2)]
+                                    : [Color.gray.opacity(0.5), Color.gray.opacity(0.4)],
+                                startPoint: .leading, endPoint: .trailing
+                            )
                         )
                     )
-                )
             }
             .disabled(validOptions.count < 2)
-            .padding(.top, 14)
+            .padding(.top, 10)
         }
     }
 
-    // MARK: - Deciding (slot machine)
+    // MARK: - Deciding / verdict captions
 
     private var decidingStage: some View {
-        VStack(spacing: 18) {
-            Text("the ball is thinking…")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.7))
-                .padding(.top, 8)
-
-            optionBoard(highlight: spotlight, dimOthers: true)
-        }
+        Text("the ball is deciding…")
+            .font(.system(size: 15, weight: .semibold, design: .rounded))
+            .foregroundColor(.white.opacity(0.75))
     }
 
-    // MARK: - Verdict
-
     private var verdictStage: some View {
-        VStack(spacing: 20) {
-            Text("the ball has decided")
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.75))
-                .padding(.top, 6)
-
-            if let winnerIndex, winnerIndex < validOptions.count {
-                Text(validOptions[winnerIndex])
-                    .font(.system(size: 38, weight: .black, design: .rounded))
-                    .foregroundColor(Color(red: 1.0, green: 0.9, blue: 0.55))
-                    .multilineTextAlignment(.center)
-                    .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 3)
-                    .padding(.horizontal, 12)
-                    .transition(.scale.combined(with: .opacity))
-            }
-
-            Text("this verdict is final. no take-backs.")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.6))
+        VStack(spacing: 16) {
+            Text("the ball has spoken. it's final.")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.7))
 
             HStack(spacing: 12) {
-                pillButton("go again", icon: "arrow.clockwise") {
-                    startDeciding()
-                }
+                pillButton("go again", icon: "arrow.clockwise") { startDeciding() }
                 pillButton("new choices", icon: "pencil") {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                         stage = .input
@@ -212,17 +263,14 @@ struct SettleItView: View {
                     }
                 }
             }
-            .padding(.top, 8)
         }
     }
 
     private func pillButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
-                Text(title)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                Image(systemName: icon).font(.system(size: 13, weight: .bold))
+                Text(title).font(.system(size: 14, weight: .bold, design: .rounded))
             }
             .foregroundColor(.white.opacity(0.92))
             .padding(.horizontal, 16)
@@ -235,75 +283,46 @@ struct SettleItView: View {
         }
     }
 
-    // MARK: - Option board
-
-    private func optionBoard(highlight: Int, dimOthers: Bool) -> some View {
-        VStack(spacing: 10) {
-            ForEach(Array(validOptions.enumerated()), id: \.offset) { i, option in
-                Text(option)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundColor(i == highlight ? .black : .white.opacity(dimOthers ? 0.45 : 0.9))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(i == highlight
-                                  ? Color(red: 1.0, green: 0.9, blue: 0.55)
-                                  : Color.white.opacity(0.1))
-                    )
-                    .scaleEffect(i == highlight ? 1.04 : 1.0)
-                    .animation(.easeOut(duration: 0.1), value: highlight)
-            }
-        }
-    }
-
-    // MARK: - The decision
+    // MARK: - The decision (slot machine)
 
     private func startDeciding() {
         let opts = validOptions
         guard opts.count >= 2 else { return }
+        let n = opts.count
         focusedField = nil
         winnerIndex = nil
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-            stage = .deciding
-        }
+        spotlight = 0
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { stage = .deciding }
+        ballWobble = true
 
-        // Pick the winner up front, then spin so the spotlight lands on it.
-        let winner = Int.random(in: 0..<opts.count)
-        // Accelerating-then-decelerating tick intervals (slot machine feel).
-        var intervals: [Double] = Array(repeating: 0.09, count: opts.count * 2)
-        var step = 0.12
-        while step < 0.55 {
-            intervals.append(step)
-            step *= 1.35
-        }
-        // Pad so the final tick lands exactly on the winner.
-        let landing = (spotlight + intervals.count) % opts.count
-        let extra = (winner - landing + opts.count) % opts.count
-        intervals.append(contentsOf: Array(repeating: 0.55, count: extra).map { _ in 0.5 })
+        // Pick the winner, then spin enough whole loops to land on it.
+        let winner = Int.random(in: 0..<n)
+        let minSteps = n * 3
+        let extra = ((winner - (spotlight + minSteps)) % n + n) % n
+        let totalSteps = minSteps + extra
 
-        var delay = 0.15
-        for (i, interval) in intervals.enumerated() {
-            delay += interval
-            let isLast = i == intervals.count - 1
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        // Accelerate-then-decelerate tick intervals.
+        var clock = 0.15
+        for i in 0..<totalSteps {
+            let progress = Double(i) / Double(max(1, totalSteps - 1))
+            let interval = 0.05 + 0.34 * pow(progress, 2.3)   // fast → slow
+            clock += interval
+            let isLast = i == totalSteps - 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + clock) {
                 guard stage == .deciding else { return }
-                spotlight = (spotlight + 1) % opts.count
-                tick.impactOccurred(intensity: isLast ? 1.0 : 0.6)
-                if isLast {
-                    finishDeciding(winner: spotlight)
-                }
+                spotlight = (spotlight + 1) % n
+                tick.impactOccurred(intensity: isLast ? 1.0 : 0.55)
+                if isLast { finishDeciding(winner: spotlight) }
             }
         }
     }
 
     private func finishDeciding(winner: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
             guard stage == .deciding else { return }
+            ballWobble = false
             winnerIndex = winner
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                stage = .verdict
-            }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.68)) { stage = .verdict }
             burstTrigger += 1
             haptics.playShiny()
             if soundEnabled { sound.playShiny() }

@@ -73,21 +73,3 @@ extension ISO8601DateFormatter {
     }
 }
 
-// MARK: - Cross-era translation (Phase 5)
-
-extension ResponseManager {
-    /// The same verdict (positive/neutral/negative), spoken by a different era.
-    func translation(
-        matching type: Response.ResponseType,
-        excluding excludedSetId: String
-    ) -> (setId: String, setName: String, text: String)? {
-        let candidates = availableSets.filter { $0.id != excludedSetId && $0.id != "random" }
-        // Walk sets in random order until one has a matching-type response.
-        for set in candidates.shuffled() {
-            if let match = set.responses.filter({ $0.type == type }).randomElement() {
-                return (set.id, set.name, match.text)
-            }
-        }
-        return nil
-    }
-}

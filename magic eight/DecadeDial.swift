@@ -2,9 +2,9 @@
 //  DecadeDial.swift
 //  magic eight
 //
-//  Phase 6.1 — the decade dial. Switching eras is a ritual, not a menu:
-//  a horizontal tuner you drag through detents. Each detent ticks with a
-//  haptic and live-morphs the whole app into that era.
+//  Phase 6.1 — the decade dial. A smooth horizontal tuner: emojis scroll
+//  continuously under your finger and snap to center; the centered era is
+//  the selection and live-morphs the whole app.
 //
 
 import SwiftUI
@@ -21,99 +21,70 @@ struct DecadeDial: View {
     let currentId: String
     let onSelect: (String) -> Void
 
-    @State private var dragAccumulator: CGFloat = 0
-    private let detentWidth: CGFloat = 56
-    private let tick = UIImpactFeedbackGenerator(style: .rigid)
+    @State private var scrollId: String?
+    private let tick = UIImpactFeedbackGenerator(style: .soft)
+    private let itemWidth: CGFloat = 52
 
-    private var currentIndex: Int {
-        themes.firstIndex(where: { $0.id == currentId }) ?? 0
+    private var currentName: String {
+        themes.first(where: { $0.id == currentId })?.name.lowercased() ?? ""
     }
 
     var body: some View {
         VStack(spacing: 6) {
-            // The tuner strip: neighbors fade out to the sides.
-            HStack(spacing: 14) {
-                ForEach(visibleSlots(), id: \.offset) { slot in
-                    slotView(slot.theme, distance: slot.offset)
-                        .onTapGesture {
-                            guard slot.offset != 0 else { return }
-                            step(by: slot.offset)
-                        }
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(
-                Capsule()
-                    .fill(Color.black.opacity(0.55))
-                    .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1))
-            )
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        let delta = value.translation.width - dragAccumulator
-                        if abs(delta) >= detentWidth {
-                            // Drag right = spin back in time (previous era).
-                            step(by: delta < 0 ? 1 : -1)
-                            dragAccumulator = value.translation.width
+            GeometryReader { geo in
+                let sideInset = max(0, (geo.size.width - itemWidth) / 2)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(themes) { theme in
+                            Text(theme.emoji)
+                                .font(.system(size: 28))
+                                .frame(width: itemWidth, height: 44)
+                                .scrollTransition(axis: .horizontal) { content, phase in
+                                    content
+                                        .opacity(phase.isIdentity ? 1.0 : 0.35)
+                                        .scaleEffect(phase.isIdentity ? 1.2 : 0.78)
+                                }
+                                .id(theme.id)
                         }
                     }
-                    .onEnded { _ in dragAccumulator = 0 }
-            )
-
-            // Needle + hint
-            Image(systemName: "arrowtriangle.up.fill")
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.7))
-                .offset(y: -4)
-            Text("drag to tune the era")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.6))
-                .offset(y: -6)
-        }
-    }
-
-    // MARK: - Slots
-
-    private struct Slot {
-        let offset: Int
-        let theme: DialTheme?
-    }
-
-    /// Five slots centered on the current selection: [-2, -1, 0, +1, +2],
-    /// wrapping around the ends so the dial spins forever.
-    private func visibleSlots() -> [Slot] {
-        guard !themes.isEmpty else { return [] }
-        return (-2...2).map { offset in
-            let idx = ((currentIndex + offset) % themes.count + themes.count) % themes.count
-            return Slot(offset: offset, theme: themes[idx])
-        }
-    }
-
-    @ViewBuilder
-    private func slotView(_ theme: DialTheme?, distance: Int) -> some View {
-        let isCenter = distance == 0
-        VStack(spacing: 2) {
-            Text(theme?.emoji ?? "")
-                .font(.system(size: isCenter ? 26 : 18))
-            if isCenter {
-                Text(theme?.name.lowercased() ?? "")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .fixedSize()
+                    .scrollTargetLayout()
+                }
+                .contentMargins(.horizontal, sideInset, for: .scrollContent)
+                .scrollTargetBehavior(.viewAligned)
+                .scrollPosition(id: $scrollId, anchor: .center)
+                // A soft spotlight marking the centered slot.
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
+                        .frame(width: itemWidth + 6, height: 46)
+                        .allowsHitTesting(false)
+                )
             }
-        }
-        .opacity(isCenter ? 1.0 : (abs(distance) == 1 ? 0.55 : 0.28))
-        .scaleEffect(isCenter ? 1.0 : 0.85)
-        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: currentId)
-    }
+            .frame(height: 48)
 
-    private func step(by delta: Int) {
-        guard !themes.isEmpty else { return }
-        let next = ((currentIndex + delta) % themes.count + themes.count) % themes.count
-        tick.impactOccurred(intensity: 0.8)
-        onSelect(themes[next].id)
+            Text(currentName)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .animation(.easeInOut(duration: 0.2), value: currentName)
+        }
+        .frame(maxWidth: 300)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.55))
+                .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 1))
+        )
+        .onAppear { scrollId = currentId }
+        .onChange(of: scrollId) { _, newValue in
+            guard let newValue, newValue != currentId else { return }
+            tick.impactOccurred(intensity: 0.6)
+            onSelect(newValue)
+        }
+        .onChange(of: currentId) { _, newValue in
+            guard scrollId != newValue else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { scrollId = newValue }
+        }
     }
 }

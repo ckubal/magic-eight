@@ -5,7 +5,6 @@
 //  Created by Charlie Kubal on 12/1/25.
 //
 
-import AVFoundation
 import SwiftUI
 
 struct SettingsView: View {
@@ -15,26 +14,6 @@ struct SettingsView: View {
     @AppStorage("ballSkin") private var ballSkinRaw = "classic"
     @AppStorage("shinyFortuneCount") private var shinyCount = 0
     @AppStorage("screenFXEnabled") private var screenFXEnabled = true
-    @AppStorage("fogModeEnabled") private var fogModeEnabled = false
-
-    /// Fog mode is opt-in and needs the microphone: request permission on
-    /// enable, and only keep the toggle on if it's granted.
-    private var fogModeBinding: Binding<Bool> {
-        Binding(
-            get: { fogModeEnabled },
-            set: { wantsOn in
-                guard wantsOn else {
-                    fogModeEnabled = false
-                    return
-                }
-                AVAudioApplication.requestRecordPermission { granted in
-                    DispatchQueue.main.async {
-                        fogModeEnabled = granted
-                    }
-                }
-            }
-        )
-    }
     
     private let privacyPolicyURLString = "https://weirdlittleideas.com/magic-eight/privacy.html"
     private let termsOfUseURLString = "https://weirdlittleideas.com/magic-eight/tos.html"
@@ -203,16 +182,10 @@ struct SettingsView: View {
                             Text("retro screen effects")
                         }
                     }
-                    Toggle(isOn: fogModeBinding) {
-                        HStack {
-                            Text("🌬️")
-                            Text("fog mode")
-                        }
-                    }
                 } header: {
                     Text("extras")
                 } footer: {
-                    Text("retro screen effects add era-authentic scanlines, tape grain, and pixel grids. fog mode uses the microphone to notice when you blow on the screen — the glass fogs up and you rub it clear with your finger. audio is never recorded or stored.")
+                    Text("adds era-authentic scanlines, tape grain, and pixel grids to the retro themes.")
                 }
 
                 if onReturnToOpening != nil {

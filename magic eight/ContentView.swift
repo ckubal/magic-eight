@@ -230,8 +230,6 @@ struct ContentView: View {
     private let glitchChance = 0.06                // ~1 in 17
 
     // Phase 5 — growth
-    @State private var translationText: String?    // same verdict, another era
-    @State private var translationSetName: String?
     @State private var showShareSheet = false
     @State private var shareImage: UIImage?
 
@@ -240,13 +238,6 @@ struct ContentView: View {
     @State private var showSettleIt = false
     @AppStorage("ballSkin") private var ballSkinRaw = "classic"
     @AppStorage("screenFXEnabled") private var screenFXEnabled = true
-
-    // Phase 6.5 — fog mode (opt-in): blow to fog the glass, rub to wipe.
-    @AppStorage("fogModeEnabled") private var fogModeEnabled = false
-    @State private var blowDetector = BlowDetector()
-    @State private var fogAmount: Double = 0
-    @State private var fogWipes: [CGPoint] = []
-    @State private var fogGeneration = 0
 
     init() {
         hapticGenerator.prepare()
@@ -465,7 +456,7 @@ struct ContentView: View {
                                 )
                         )
                     }
-                    .padding(.top, proxy.safeAreaInsets.top + 8)
+                    .padding(.top, 16)
 
                     if showThemeDial {
                         DecadeDial(
@@ -504,7 +495,7 @@ struct ContentView: View {
                             .padding(.leading, 16)
                             Spacer()
                         }
-                        .padding(.top, proxy.safeAreaInsets.top + 8)
+                        .padding(.top, 16)
                         Spacer()
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -596,7 +587,7 @@ struct ContentView: View {
                             }
                             .padding(.trailing, 16)
                         }
-                        .padding(.top, proxy.safeAreaInsets.top + 8)
+                        .padding(.top, 16)
                         Spacer()
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -622,7 +613,7 @@ struct ContentView: View {
                                         )
                                     )
                             )
-                            .padding(.top, proxy.safeAreaInsets.top + 56)
+                            .padding(.top, 74)
                         Spacer()
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -632,67 +623,26 @@ struct ContentView: View {
                 .zIndex(7)
             }
 
-            // Post-reveal actions: translate across eras + share receipt
+            // Post-reveal action: share the fortune receipt
             if appState == .showingResponse && currentResponse != nil && !showIntroScreen {
                 GeometryReader { proxy in
-                    VStack(spacing: 10) {
+                    VStack {
                         Spacer()
-
-                        // Cross-era translation result
-                        if let translated = translationText, let setName = translationSetName {
-                            VStack(spacing: 3) {
-                                Text(setName.lowercased())
-                                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.65))
-                                Text("“\(translated.lowercased())”")
-                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.center)
+                        Button(action: shareCurrentFortune) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text("share")
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
                             }
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
+                            .foregroundColor(.white.opacity(0.92))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
                             .background(
-                                Capsule().fill(Color.black.opacity(0.65))
+                                Capsule()
+                                    .fill(Color.black.opacity(0.42))
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
                             )
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
-
-                        HStack(spacing: 12) {
-                            if !isSassyReveal {
-                                Button(action: translateCurrentFortune) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "arrow.2.squarepath")
-                                            .font(.system(size: 13, weight: .bold))
-                                        Text("other eras")
-                                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                                    }
-                                    .foregroundColor(.white.opacity(0.92))
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 9)
-                                    .background(
-                                        Capsule()
-                                            .fill(Color.black.opacity(0.42))
-                                            .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                                    )
-                                }
-                            }
-
-                            Button(action: shareCurrentFortune) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "square.and.arrow.up")
-                                        .font(.system(size: 13, weight: .bold))
-                                    Text("share")
-                                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                                }
-                                .foregroundColor(.white.opacity(0.92))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 9)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.black.opacity(0.42))
-                                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                                )
-                            }
                         }
                         .padding(.bottom, proxy.safeAreaInsets.bottom + 22)
                     }
@@ -718,12 +668,6 @@ struct ContentView: View {
                 .allowsHitTesting(false)
                 .transition(.opacity)
                 .zIndex(6)
-            }
-
-            // Fog mode: breath condensation you rub away (under the scanlines).
-            if fogModeEnabled && fogAmount > 0.01 && !showIntroScreen {
-                FogOverlay(fogAmount: $fogAmount, wipes: $fogWipes)
-                    .zIndex(8)
             }
 
             // Era-authentic screen treatment (CRT/VHS/LCD), above everything
@@ -794,16 +738,7 @@ struct ContentView: View {
                 startMainBackgroundDriftIfNeeded()
             }
         }
-        .onChange(of: fogModeEnabled) { _, enabled in
-            if enabled { blowDetector.start() } else {
-                blowDetector.stop()
-                fogAmount = 0
-                fogWipes = []
-            }
-        }
         .onAppear {
-            blowDetector.onBlow = { handleBlow() }
-            if fogModeEnabled { blowDetector.start() }
             introBackgroundSetId = randomThemeSetId()
             if !showIntroScreen {
                 startInitialHintPulseIfNeeded()
@@ -877,52 +812,11 @@ struct ContentView: View {
         }
     }
 
-    /// Blow detected → the glass fogs up; rubbing (FogOverlay) wipes it clear.
-    /// The fog also slowly evaporates on its own.
-    private func handleBlow() {
-        guard fogModeEnabled, !showIntroScreen, appState != .faceDown else { return }
-        fogGeneration += 1
-        let generation = fogGeneration
-
-        fogWipes = []
-        hapticGenerator.impactOccurred(intensity: 0.6)
-        withAnimation(.easeIn(duration: 0.9)) {
-            fogAmount = 1.0
-        }
-        // Evaporate after a while unless a fresh blow re-fogged the glass.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
-            guard self.fogGeneration == generation else { return }
-            withAnimation(.linear(duration: 5.0)) {
-                self.fogAmount = 0
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.2) {
-                guard self.fogGeneration == generation else { return }
-                self.fogWipes = []
-            }
-        }
-    }
-
-    /// Clear the per-reveal extras (glitch text, translation, banners).
+    /// Clear the per-reveal extras (glitch text, banners).
     private func clearRevealExtras() {
         glitchOverrideText = nil
-        translationText = nil
-        translationSetName = nil
         isSassyReveal = false
         showDailyBanner = false
-    }
-
-    /// Same verdict, different era — each tap pulls a fresh translation.
-    private func translateCurrentFortune() {
-        guard let response = currentResponse else { return }
-        guard let result = responseManager.translation(
-            matching: response.type,
-            excluding: responseManager.effectiveSetId
-        ) else { return }
-        hapticGenerator.impactOccurred(intensity: 0.5)
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            translationText = result.text
-            translationSetName = result.setName
-        }
     }
 
     /// Render the era-styled receipt and open the share sheet.
