@@ -28,6 +28,8 @@ struct SettleItView: View {
     @State private var ballScale: CGFloat = 1.0
     @State private var ballOpacity: Double = 1.0
     @State private var winnerPulse = false
+    // Tally of wins per choice across "go again" rounds (same choices).
+    @State private var winCounts: [String: Int] = [:]
     @FocusState private var focusedField: Int?
 
     private let tick = UIImpactFeedbackGenerator(style: .rigid)
@@ -41,6 +43,21 @@ struct SettleItView: View {
             return validOptions[winnerIndex]
         }
         return "?"
+    }
+
+    /// Choices with their win tallies, best first.
+    private var leaderboard: [(name: String, wins: Int)] {
+        validOptions.map { ($0, winCounts[$0] ?? 0) }.sorted { $0.1 > $1.1 }
+    }
+
+    private var gamesPlayed: Int { winCounts.values.reduce(0, +) }
+
+    /// Escalating "best of" suggestion. Leader has n wins → offer to play a
+    /// best-of-(2n+1), which is clinched at n+1 wins.
+    private var seriesPrompt: String? {
+        guard gamesPlayed >= 1 else { return nil }
+        let n = winCounts.values.max() ?? 0
+        return "best \(n + 1) of \(2 * n + 1)?"
     }
 
     var body: some View {
@@ -180,7 +197,7 @@ struct SettleItView: View {
 
     private func numberBadge(_ n: Int, lit: Bool = false) -> some View {
         ZStack {
-            Circle().fill(lit ? Color.black.opacity(0.25) : Color.white.opacity(0.16))
+            Circle().fill(lit ? Color.white.opacity(0.92) : Color.white.opacity(0.16))
                 .frame(width: 30, height: 30)
             Text("\(n)")
                 .font(.system(size: 14, weight: .black, design: .rounded))
@@ -188,16 +205,38 @@ struct SettleItView: View {
         }
     }
 
+    // 90s-arcade celebratory palette for the highlighted / winning choice.
+    private func cardFill(highlighted: Bool, winner: Bool) -> AnyShapeStyle {
+        if winner {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.22, blue: 0.62),  // hot pink
+                        Color(red: 1.0, green: 0.48, blue: 0.14),  // tangerine
+                        Color(red: 1.0, green: 0.82, blue: 0.18),  // gold
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+        } else if highlighted {
+            return AnyShapeStyle(Color(red: 0.0, green: 0.85, blue: 0.85))  // electric cyan flash
+        } else {
+            return AnyShapeStyle(Color.black.opacity(0.4))
+        }
+    }
+
     private func cardBackground(highlighted: Bool, winner: Bool) -> some View {
         Capsule()
-            .fill(winner || highlighted
-                  ? Color(red: 1.0, green: 0.9, blue: 0.55)
-                  : Color.black.opacity(0.4))
+            .fill(cardFill(highlighted: highlighted, winner: winner))
             .overlay(
                 Capsule().stroke(
-                    winner ? Color(red: 1.0, green: 0.85, blue: 0.3) : Color.white.opacity(0.22),
-                    lineWidth: winner ? 2 : 1
+                    winner ? Color(red: 1.0, green: 0.95, blue: 0.6) : Color.white.opacity(0.22),
+                    lineWidth: winner ? 2.5 : 1
                 )
+            )
+            .shadow(
+                color: winner ? Color(red: 1.0, green: 0.25, blue: 0.6).opacity(0.7) : .clear,
+                radius: winner ? 16 : 0
             )
     }
 
@@ -264,18 +303,60 @@ struct SettleItView: View {
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .foregroundColor(.white.opacity(0.75))
         case .verdict:
-            HStack(spacing: 12) {
-                pillButton("go again", icon: "arrow.clockwise") { startDeciding() }
-                pillButton("new choices", icon: "pencil") {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        stage = .input
-                        winnerIndex = nil
-                        ballScale = 1.0
-                        ballOpacity = 1.0
+            VStack(spacing: 12) {
+                if gamesPlayed >= 1 {
+                    leaderboardView
+                }
+                if let prompt = seriesPrompt {
+                    Text("🏆 \(prompt)")
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .foregroundColor(Color(red: 1.0, green: 0.9, blue: 0.55))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Color.black.opacity(0.5)))
+                }
+                HStack(spacing: 12) {
+                    pillButton("go again", icon: "arrow.clockwise") { startDeciding() }
+                    pillButton("new choices", icon: "pencil") {
+                        winCounts = [:]
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            stage = .input
+                            winnerIndex = nil
+                            ballScale = 1.0
+                            ballOpacity = 1.0
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var leaderboardView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(leaderboard.enumerated()), id: \.offset) { idx, entry in
+                    HStack(spacing: 5) {
+                        if idx == 0 && entry.wins > 0 { Text("👑").font(.system(size: 12)) }
+                        Text(entry.name)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
+                            .lineLimit(1)
+                        Text("\(entry.wins)")
+                            .font(.system(size: 14, weight: .black, design: .rounded))
+                            .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.35))
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.5))
+                            .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                    )
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func pillButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
@@ -333,6 +414,9 @@ struct SettleItView: View {
 
     private func landOn(winner: Int) {
         winnerIndex = winner
+        if winner < validOptions.count {
+            winCounts[validOptions[winner], default: 0] += 1
+        }
         // Celebrate the winning choice card.
         withAnimation { winnerPulse = true }
         burstTrigger += 1
