@@ -55,7 +55,32 @@ class ResponseManager: ObservableObject {
         "nbajam": ("🔥", .popCulture),
         "sportscenter": ("📺", .popCulture)
     ]
-    
+
+    /// Display names live in code (not the JSON) so they can't be reverted by a
+    /// bundled or remote responses.json. Wink-and-nod names avoid trademarks.
+    private let themeNames: [String: String] = [
+        "classic": "Classic",
+        "shakespearean": "Shakespearean",
+        "huntersthompson": "Gonzo",
+        "genalpha": "Gen Alpha",
+        "genz": "Gen Z",
+        "millennial": "Millennials",
+        "genx": "Gen X",
+        "boomers1958": "Boomers",
+        "twitterx2024": "The Timeline '25",
+        "tiktok2020": "For You '20",
+        "tumblr2012": "Soft Grunge '12",
+        "facebook2008": "The Wall '08",
+        "deviantart2006": "Fan Art '06",
+        "myspace2005": "Top 8 '05",
+        "xanga2002": "Glitter Blog '02",
+        "aimy2k": "Away Message '01",
+        "harrypotter": "Wizard School",
+        "matrix": "Digital Rain",
+        "nbajam": "Arcade Hoops",
+        "sportscenter": "Highlight Reel"
+    ]
+
     init() {
         // Load all sets from local JSON file for instant response availability
         loadLocalResponseSets()
@@ -80,7 +105,7 @@ class ResponseManager: ObservableObject {
                 }
                 return ResponseSet(
                     id: remoteSet.id,
-                    name: remoteSet.name,
+                    name: themeNames[remoteSet.id] ?? remoteSet.name,
                     emoji: metadata.emoji,
                     category: metadata.category,
                     responses: responses
@@ -179,7 +204,7 @@ class ResponseManager: ObservableObject {
                             let existingSet = self.availableSets[index]
                             let updatedSet = ResponseSet(
                                 id: remoteSet.id,
-                                name: remoteSet.name,
+                                name: self.themeNames[remoteId] ?? existingSet.name,
                                 emoji: existingSet.emoji,
                                 category: existingSet.category,
                                 responses: responses
@@ -199,7 +224,7 @@ class ResponseManager: ObservableObject {
                             
                             self.availableSets.append(ResponseSet(
                                 id: remoteSet.id,
-                                name: remoteSet.name,
+                                name: self.themeNames[remoteSet.id] ?? remoteSet.name,
                                 emoji: "🎱",
                                 category: .styles,
                                 responses: responses
@@ -291,7 +316,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createAIMY2KSet() -> ResponseSet {
-        ResponseSet(id: "aimy2k", name: "AIM 2001", emoji: "💬", category: .techEras, responses: [
+        ResponseSet(id: "aimy2k", name: "Away Message '01", emoji: "💬", category: .techEras, responses: [
             Response(text: "yup :)", type: .positive),
             Response(text: "def!", type: .positive),
             Response(text: "100% lol", type: .positive),
@@ -316,7 +341,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createTikTok2020Set() -> ResponseSet {
-        ResponseSet(id: "tiktok2020", name: "TikTok 2020", emoji: "🎵", category: .techEras, responses: [
+        ResponseSet(id: "tiktok2020", name: "For You '20", emoji: "🎵", category: .techEras, responses: [
             Response(text: "no cap, yes", type: .positive),
             Response(text: "big yes energy", type: .positive),
             Response(text: "that's a W", type: .positive),
@@ -341,7 +366,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createTumblr2012Set() -> ResponseSet {
-        ResponseSet(id: "tumblr2012", name: "Tumblr 2012", emoji: "🌙", category: .techEras, responses: [
+        ResponseSet(id: "tumblr2012", name: "Soft Grunge '12", emoji: "🌙", category: .techEras, responses: [
             Response(text: "yeah, pretty much", type: .positive),
             Response(text: "seems legit", type: .positive),
             Response(text: "universe says yes", type: .positive),
@@ -366,7 +391,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createMySpace2005Set() -> ResponseSet {
-        ResponseSet(id: "myspace2005", name: "MySpace 2005", emoji: "🖤", category: .techEras, responses: [
+        ResponseSet(id: "myspace2005", name: "Top 8 '05", emoji: "🖤", category: .techEras, responses: [
             Response(text: "omg yes <3", type: .positive),
             Response(text: "totes a yes", type: .positive),
             Response(text: "looks hella good", type: .positive),
@@ -391,7 +416,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createFacebook2008Set() -> ResponseSet {
-        ResponseSet(id: "facebook2008", name: "Facebook 2008", emoji: "📘", category: .techEras, responses: [
+        ResponseSet(id: "facebook2008", name: "The Wall '08", emoji: "📘", category: .techEras, responses: [
             Response(text: "is feeling yes today", type: .positive),
             Response(text: "omg yes, long story lol", type: .positive),
             Response(text: "yup… more later ;)", type: .positive),
@@ -441,7 +466,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createNBAJamSet() -> ResponseSet {
-        ResponseSet(id: "nbajam", name: "Arcade Sports", emoji: "🔥", category: .popCulture, responses: [
+        ResponseSet(id: "nbajam", name: "Arcade Hoops", emoji: "🔥", category: .popCulture, responses: [
             Response(text: "HE'S ON FIRE! (…that's a yes)", type: .positive),
             Response(text: "BOOMSHAKALAKA!", type: .positive),
             Response(text: "YES! COUNT IT!", type: .positive),
@@ -466,7 +491,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createSportsCenterSet() -> ResponseSet {
-        ResponseSet(id: "sportscenter", name: "SportsCenter Catchphrases", emoji: "📺", category: .popCulture, responses: [
+        ResponseSet(id: "sportscenter", name: "Highlight Reel", emoji: "📺", category: .popCulture, responses: [
             Response(text: "Booyah!", type: .positive),
             Response(text: "Yes! Sick highlight!", type: .positive),
             Response(text: "En fuego!", type: .positive),
@@ -491,7 +516,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createHarryPotterSet() -> ResponseSet {
-        ResponseSet(id: "harrypotter", name: "Harry Potter", emoji: "🪄", category: .popCulture, responses: [
+        ResponseSet(id: "harrypotter", name: "Wizard School", emoji: "🪄", category: .popCulture, responses: [
             Response(text: "\"The prophecy favors yes.\"", type: .positive),
             Response(text: "\"By Merlin's beard—yes!\"", type: .positive),
             Response(text: "\"All signs point to yes, dear.\"", type: .positive),
@@ -516,7 +541,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createMatrixSet() -> ResponseSet {
-        ResponseSet(id: "matrix", name: "The Matrix", emoji: "🟩", category: .popCulture, responses: [
+        ResponseSet(id: "matrix", name: "Digital Rain", emoji: "🟩", category: .popCulture, responses: [
             Response(text: "\"Yes — the code agrees.\"", type: .positive),
             Response(text: "\"You are the One… for this yes.\"", type: .positive),
             Response(text: "\"Morpheus nods: yes.\"", type: .positive),
@@ -541,7 +566,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createXanga2002Set() -> ResponseSet {
-        ResponseSet(id: "xanga2002", name: "Xanga Girl 2002", emoji: "📓", category: .techEras, responses: [
+        ResponseSet(id: "xanga2002", name: "Glitter Blog '02", emoji: "📓", category: .techEras, responses: [
             Response(text: "OMG YESSSS!!!", type: .positive),
             Response(text: "yesss babe ilysm", type: .positive),
             Response(text: "YES — miss ur face!!!", type: .positive),
@@ -591,7 +616,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createTwitterX2024Set() -> ResponseSet {
-        ResponseSet(id: "twitterx2024", name: "Twitter 2025", emoji: "🐦", category: .techEras, responses: [
+        ResponseSet(id: "twitterx2024", name: "The Timeline '25", emoji: "🐦", category: .techEras, responses: [
             Response(text: "\"Hard yes. Don't @ me.\"", type: .positive),
             Response(text: "\"W. Massive W.\"", type: .positive),
             Response(text: "\"Yes — verified vibes only.\"", type: .positive),
@@ -616,7 +641,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createDeviantArt2006Set() -> ResponseSet {
-        ResponseSet(id: "deviantart2006", name: "DeviantArt 2006", emoji: "🎨", category: .techEras, responses: [
+        ResponseSet(id: "deviantart2006", name: "Fan Art '06", emoji: "🎨", category: .techEras, responses: [
             Response(text: "omg yesss!! ^_^", type: .positive),
             Response(text: "totally yes <333", type: .positive),
             Response(text: "yus!! glomps u", type: .positive),
@@ -691,7 +716,7 @@ class ResponseManager: ObservableObject {
     }
     
     private func createHunterSThompsonSet() -> ResponseSet {
-        ResponseSet(id: "huntersthompson", name: "Hunter S. Thompson", emoji: "🦂", category: .styles, responses: [
+        ResponseSet(id: "huntersthompson", name: "Gonzo", emoji: "🦂", category: .styles, responses: [
             Response(text: "\"Hell yes — ride the wave.\"", type: .positive),
             Response(text: "\"Absolutely — full throttle.\"", type: .positive),
             Response(text: "\"A savage YES, my friend.\"", type: .positive),
