@@ -13,8 +13,6 @@ import UIKit
 
 struct SettleItView: View {
     let themeSetId: String
-    let soundEnabled: Bool
-    let sound: SoundManager
     let haptics: HapticManager
     let onClose: () -> Void
 
@@ -421,7 +419,6 @@ struct SettleItView: View {
         withAnimation { winnerPulse = true }
         burstTrigger += 1
         haptics.play(for: themeSetId)
-        if soundEnabled { sound.play(for: themeSetId) }
 
         // Then throw the 8-ball at the screen with the verdict on it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
@@ -434,7 +431,6 @@ struct SettleItView: View {
             }
             burstTrigger += 1
             haptics.playShiny()
-            if soundEnabled { sound.playShiny() }
         }
     }
 }

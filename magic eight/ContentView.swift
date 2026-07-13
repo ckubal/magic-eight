@@ -209,8 +209,10 @@ struct ContentView: View {
     
     private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
     private let haptics = HapticManager()
-    private let sound = SoundManager()
-    @AppStorage("soundEnabled") private var soundEnabled = true
+    // Sound feature disabled for now — re-enable by uncommenting these plus the
+    // speaker toggle, the two play calls in the reveal, and the settle-it wiring.
+    // private let sound = SoundManager()
+    // @AppStorage("soundEnabled") private var soundEnabled = true
 
     // Rare "shiny" fortunes ✨
     @State private var isShinyReveal = false
@@ -563,7 +565,8 @@ struct ContentView: View {
                 }
             }
 
-            // Sound on/off toggle (top-right, safe-area aware)
+            // Sound on/off toggle — disabled while the sound feature is off.
+            #if false
             if !showIntroScreen {
                 GeometryReader { proxy in
                     VStack {
@@ -591,6 +594,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            #endif
 
             // "Fortune of the day" ceremony (first flip each day)
             if showDailyBanner && appState == .showingResponse && !showIntroScreen {
@@ -696,8 +700,6 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showSettleIt) {
             SettleItView(
                 themeSetId: responseManager.effectiveSetId,
-                soundEnabled: soundEnabled,
-                sound: sound,
                 haptics: haptics
             ) {
                 showSettleIt = false
@@ -932,10 +934,10 @@ struct ContentView: View {
                 if self.isShinyReveal {
                     self.shinyCount += 1
                     self.haptics.playShiny()
-                    if self.soundEnabled { self.sound.playShiny() }
+                    // if self.soundEnabled { self.sound.playShiny() }  // sound feature disabled
                 } else {
                     self.haptics.play(for: self.responseManager.effectiveSetId)
-                    if self.soundEnabled { self.sound.play(for: self.responseManager.effectiveSetId) }
+                    // if self.soundEnabled { self.sound.play(for: self.responseManager.effectiveSetId) }  // sound feature disabled
                 }
 
                 // The ball occasionally talks back instead of answering.
