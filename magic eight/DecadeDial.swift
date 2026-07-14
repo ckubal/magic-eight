@@ -20,6 +20,8 @@ struct DecadeDial: View {
     let themes: [DialTheme]
     let currentId: String
     let onSelect: (String) -> Void
+    /// Called when the user taps the already-centered era to confirm + close.
+    var onConfirm: () -> Void = {}
 
     @State private var scrollId: String?
     private let tick = UIImpactFeedbackGenerator(style: .soft)
@@ -43,6 +45,17 @@ struct DecadeDial: View {
                                     content
                                         .opacity(phase.isIdentity ? 1.0 : 0.35)
                                         .scaleEffect(phase.isIdentity ? 1.2 : 0.78)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if theme.id == currentId {
+                                        // Tapping the selected era confirms + closes.
+                                        onConfirm()
+                                    } else {
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            scrollId = theme.id
+                                        }
+                                    }
                                 }
                                 .id(theme.id)
                         }

@@ -81,6 +81,24 @@ class ResponseManager: ObservableObject {
         "sportscenter": "Highlight Reel"
     ]
 
+    /// Canonical display order (dial + settings). Tech eras run earliest → latest.
+    private let themeOrder: [String] = [
+        // styles
+        "classic", "shakespearean", "huntersthompson",
+        // tech eras — chronological
+        "aimy2k", "xanga2002", "myspace2005", "deviantart2006",
+        "facebook2008", "tumblr2012", "tiktok2020", "twitterx2024",
+        // pop culture
+        "harrypotter", "matrix", "nbajam", "sportscenter",
+        // generations
+        "boomers1958", "genx", "millennial", "genz", "genalpha"
+    ]
+
+    private func sortAvailableSets() {
+        let index = Dictionary(uniqueKeysWithValues: themeOrder.enumerated().map { ($1, $0) })
+        availableSets.sort { (index[$0.id] ?? Int.max) < (index[$1.id] ?? Int.max) }
+    }
+
     init() {
         // Load all sets from local JSON file for instant response availability
         loadLocalResponseSets()
@@ -115,6 +133,7 @@ class ResponseManager: ObservableObject {
             // Fallback to hardcoded sets if JSON file not found
             loadAllResponseSets()
         }
+        sortAvailableSets()
     }
     
     private func loadAllResponseSets() {
@@ -231,6 +250,7 @@ class ResponseManager: ObservableObject {
                             ))
                         }
                     }
+                    self.sortAvailableSets()
                 }
             } catch {
                 // Silently fail

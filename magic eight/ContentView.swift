@@ -466,6 +466,12 @@ struct ContentView: View {
                             currentId: responseManager.effectiveSetId,
                             onSelect: { id in
                                 responseManager.selectedSetId = id
+                            },
+                            onConfirm: {
+                                hapticGenerator.impactOccurred(intensity: 0.4)
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                                    showThemeDial = false
+                                }
                             }
                         )
                         .transition(.opacity.combined(with: .move(edge: .top)))
