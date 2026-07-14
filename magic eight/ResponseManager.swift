@@ -76,7 +76,7 @@ class ResponseManager: ObservableObject {
         "xanga2002": "Glitter Blog '02",
         "aimy2k": "Away Message '01",
         "harrypotter": "Wizard School",
-        "matrix": "Red Pill",
+        "matrix": "White Rabbit",
         "nbajam": "Arcade Hoops",
         "sportscenter": "Highlight Reel"
     ]
