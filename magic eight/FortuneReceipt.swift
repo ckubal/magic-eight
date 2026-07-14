@@ -41,7 +41,7 @@ struct FortuneReceiptView: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text("★ MAGIC EIGHT ★")
+            Text("★ magic eight ★")
                 .font(.system(size: 20, weight: .black, design: .monospaced))
                 .kerning(2)
             Text("official fortune receipt")
@@ -51,19 +51,19 @@ struct FortuneReceiptView: View {
             dashes()
 
             HStack {
-                Text("DATE")
+                Text("date")
                 Spacer()
                 Text(stamp)
             }
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             HStack {
-                Text("ERA")
+                Text("era")
                 Spacer()
                 Text(themeName.lowercased())
             }
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             HStack {
-                Text("METHOD")
+                Text("method")
                 Spacer()
                 Text("one (1) phone flip")
             }
@@ -71,12 +71,12 @@ struct FortuneReceiptView: View {
 
             dashes()
 
-            Text("THE BALL SAYS:")
+            Text("the ball says:")
                 .font(.system(size: 11, weight: .regular, design: .monospaced))
                 .foregroundColor(ink.opacity(0.7))
                 .padding(.top, 4)
 
-            Text(answer.uppercased())
+            Text(answer.lowercased())
                 .font(.system(size: 26, weight: .black, design: .monospaced))
                 .foregroundColor(accent)
                 .multilineTextAlignment(.center)
@@ -84,7 +84,7 @@ struct FortuneReceiptView: View {
                 .padding(.vertical, 6)
 
             if isShiny {
-                Text("✨ RARE SHINY FORTUNE ✨")
+                Text("✨ rare shiny fortune ✨")
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundColor(accent)
             }

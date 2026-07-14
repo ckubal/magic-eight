@@ -177,7 +177,7 @@ struct SettleItView: View {
                     let isWinner = (i == winnerIndex)
                     HStack(spacing: 10) {
                         numberBadge(i + 1, lit: isHighlighted || isWinner)
-                        Text(option)
+                        Text(option.lowercased())
                             .font(.system(size: 20, weight: .black, design: .rounded))
                             .foregroundColor(isHighlighted || isWinner ? .black : .white.opacity(0.85))
                         Spacer(minLength: 0)
@@ -259,7 +259,7 @@ struct SettleItView: View {
 
             if stage == .verdict {
                 TriangleWindow(size: tri, offset: .zero) {
-                    TriangleFittedText(text: ballAnswer.uppercased(), opacity: 1)
+                    TriangleFittedText(text: ballAnswer.lowercased(), opacity: 1)
                 }
             } else if stage == .input {
                 Text("?")
@@ -335,7 +335,7 @@ struct SettleItView: View {
                 ForEach(Array(leaderboard.enumerated()), id: \.offset) { idx, entry in
                     HStack(spacing: 5) {
                         if idx == 0 && entry.wins > 0 { Text("👑").font(.system(size: 12)) }
-                        Text(entry.name)
+                        Text(entry.name.lowercased())
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.9))
                             .lineLimit(1)
