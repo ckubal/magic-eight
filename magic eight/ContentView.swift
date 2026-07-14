@@ -763,7 +763,9 @@ struct ContentView: View {
             }
         } else if appState == .showingResponse, let response = currentResponse {
             TriangleFittedText(
-                text: (glitchOverrideText ?? response.text).lowercased(),
+                // The answer on the ball stays uppercase, like the classic
+                // Magic 8 Ball die. (Everything else in the app is lowercase.)
+                text: (glitchOverrideText ?? response.text).uppercased(),
                 opacity: responseOpacity
             )
                 // Surface from the depths: rise up, sharpen, settle.

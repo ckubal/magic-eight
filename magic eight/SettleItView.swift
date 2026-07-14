@@ -259,7 +259,8 @@ struct SettleItView: View {
 
             if stage == .verdict {
                 TriangleWindow(size: tri, offset: .zero) {
-                    TriangleFittedText(text: ballAnswer.lowercased(), opacity: 1)
+                    // The verdict on the ball stays uppercase, like the classic die.
+                    TriangleFittedText(text: ballAnswer.uppercased(), opacity: 1)
                 }
             } else if stage == .input {
                 Text("?")
