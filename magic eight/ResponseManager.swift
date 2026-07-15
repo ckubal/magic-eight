@@ -24,7 +24,7 @@ class ResponseManager: ObservableObject {
     /// Theme id used for wallpaper and responses; when "random" is selected, equals randomResolvedSetId.
     var effectiveSetId: String {
         if selectedSetId == "random" {
-            return randomResolvedSetId ?? availableSets.randomElement()?.id ?? "classic"
+            return randomResolvedSetId ?? unlockedSets().randomElement()?.id ?? "classic"
         }
         return selectedSetId
     }
@@ -99,11 +99,41 @@ class ResponseManager: ObservableObject {
         availableSets.sort { (index[$0.id] ?? Int.max) < (index[$1.id] ?? Int.max) }
     }
 
+    // MARK: - Unlockable themes (via rare "shiny" fortunes)
+
+    /// Bonus themes that unlock as rare fortunes are collected.
+    /// id → shinies required. Absent = available from the start.
+    let themeUnlockThresholds: [String: Int] = [
+        "harrypotter": 2,   // wizard school
+        "matrix": 4,        // white rabbit
+        "nbajam": 6,        // arcade hoops
+        "sportscenter": 8   // highlight reel
+    ]
+
+    func themeUnlockThreshold(_ id: String) -> Int { themeUnlockThresholds[id] ?? 0 }
+
+    func isThemeUnlocked(_ id: String, shinyCount: Int) -> Bool {
+        shinyCount >= themeUnlockThreshold(id)
+    }
+
+    private var storedShinyCount: Int {
+        UserDefaults.standard.integer(forKey: "shinyFortuneCount")
+    }
+
+    /// Sets currently available to play (locked bonus themes excluded).
+    func unlockedSets() -> [ResponseSet] {
+        let n = storedShinyCount
+        return availableSets.filter { isThemeUnlocked($0.id, shinyCount: n) }
+    }
+
     init() {
         // Load all sets from local JSON file for instant response availability
         loadLocalResponseSets()
         if let savedSetId = UserDefaults.standard.string(forKey: "selectedResponseSetId") {
-            selectedSetId = savedSetId
+            // Don't restore a bonus theme that's still locked.
+            if savedSetId == "random" || isThemeUnlocked(savedSetId, shinyCount: storedShinyCount) {
+                selectedSetId = savedSetId
+            }
         }
         loadSelectedSet()
         // Check for remote updates in background (non-blocking)
@@ -171,7 +201,7 @@ class ResponseManager: ObservableObject {
     
     private func loadSelectedSet() {
         if selectedSetId == "random" {
-            let pickable = availableSets.filter { $0.id != "random" }
+            let pickable = unlockedSets().filter { $0.id != "random" }
             guard let chosen = pickable.randomElement() else {
                 responses = availableSets.first?.responses ?? []
                 randomResolvedSetId = nil

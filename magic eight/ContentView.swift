@@ -216,6 +216,7 @@ struct ContentView: View {
 
     // Rare "shiny" fortunes ✨
     @State private var isShinyReveal = false
+    @State private var shinyUnlockName: String?   // set when this shiny unlocks something
     @AppStorage("shinyFortuneCount") private var shinyCount = 0
     private let shinyChance = 0.015  // ~1 in 67
 
@@ -460,9 +461,9 @@ struct ContentView: View {
 
                     if showThemeDial {
                         DecadeDial(
-                            themes: responseManager.availableSets.map {
-                                DialTheme(id: $0.id, emoji: $0.emoji, name: $0.name)
-                            },
+                            themes: responseManager.availableSets
+                                .filter { responseManager.isThemeUnlocked($0.id, shinyCount: shinyCount) }
+                                .map { DialTheme(id: $0.id, emoji: $0.emoji, name: $0.name) },
                             currentId: responseManager.effectiveSetId,
                             onSelect: { id in
                                 responseManager.selectedSetId = id
@@ -661,7 +662,7 @@ struct ContentView: View {
                     .zIndex(5)
                 VStack {
                     Spacer().frame(height: 92)
-                    ShinyBanner(count: shinyCount)
+                    ShinyBanner(count: shinyCount, unlocked: shinyUnlockName)
                     Spacer()
                 }
                 .allowsHitTesting(false)
@@ -809,6 +810,21 @@ struct ContentView: View {
         glitchOverrideText = nil
         isSassyReveal = false
         showDailyBanner = false
+        shinyUnlockName = nil
+    }
+
+    /// Name of the theme or ball skin unlocked exactly at this shiny count
+    /// (nil if this shiny didn't cross an unlock threshold).
+    private func thingUnlocked(atShinyCount count: Int) -> String? {
+        if let set = responseManager.availableSets.first(where: {
+            responseManager.themeUnlockThreshold($0.id) == count
+        }) {
+            return "\(set.name.lowercased()) theme"
+        }
+        if let skin = BallSkin.allCases.first(where: { $0.requiredShinies == count && $0.requiredShinies > 0 }) {
+            return "\(skin.title) ball"
+        }
+        return nil
     }
 
     /// Render the era-styled receipt and open the system share sheet.
@@ -931,6 +947,7 @@ struct ContentView: View {
                     && Double.random(in: 0...1) < self.sassyChance
                 if self.isShinyReveal {
                     self.shinyCount += 1
+                    self.shinyUnlockName = self.thingUnlocked(atShinyCount: self.shinyCount)
                     self.haptics.playShiny()
                     // if self.soundEnabled { self.sound.playShiny() }  // sound feature disabled
                     // A rising triple-buzz so a rare fortune is unmistakable.
@@ -1089,7 +1106,10 @@ struct ContentView: View {
     }
     
     private func randomThemeSetId(excluding current: String? = nil) -> String {
-        let ids = responseManager.availableSets.map(\.id)
+        // Only cycle through unlocked themes.
+        let ids = responseManager.availableSets
+            .filter { responseManager.isThemeUnlocked($0.id, shinyCount: shinyCount) }
+            .map(\.id)
         guard !ids.isEmpty else { return "classic" }
         
         if let current {
@@ -1707,6 +1727,7 @@ struct TriangleWindow: View {
 /// Celebratory banner for a rare "shiny" fortune — pops in with a spring.
 struct ShinyBanner: View {
     let count: Int
+    var unlocked: String? = nil
     @State private var shown = false
     @State private var shimmer = false
 
@@ -1728,9 +1749,15 @@ struct ShinyBanner: View {
                 .font(.system(size: 21, weight: .black, design: .rounded))
                 .foregroundStyle(gold)
                 .shadow(color: Color(red: 1, green: 0.7, blue: 0.1).opacity(0.6), radius: 8)
-            Text("one in a hundred · #\(count)")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.85))
+            if let unlocked {
+                Text("🔓 unlocked: \(unlocked)!")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+            } else {
+                Text("#\(count) · collect to unlock more")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
+            }
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 12)

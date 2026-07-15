@@ -110,24 +110,42 @@ struct SettingsView: View {
                 ForEach(categoryDisplayOrder, id: \.self) { category in
                     let sets = orderedSets(for: category)
                     if !sets.isEmpty {
-                        Section(header: Text(category.rawValue)) {
+                        let hasLocked = sets.contains { !responseManager.isThemeUnlocked($0.id, shinyCount: shinyCount) }
+                        Section {
                             ForEach(sets) { set in
+                                let unlocked = responseManager.isThemeUnlocked(set.id, shinyCount: shinyCount)
                                 Button(action: {
+                                    guard unlocked else { return }
                                     responseManager.selectedSetId = set.id
                                     dismiss()
                                 }) {
                                     HStack {
                                         Text(set.emoji)
                                             .font(.title2)
+                                            .opacity(unlocked ? 1 : 0.45)
                                         Text(set.name.lowercased())
-                                            .foregroundColor(.primary)
+                                            .foregroundColor(unlocked ? .primary : .secondary)
                                         Spacer()
-                                        if responseManager.selectedSetId == set.id {
+                                        if !unlocked {
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "lock.fill")
+                                                Text("\(responseManager.themeUnlockThreshold(set.id))✨")
+                                            }
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundColor(.secondary)
+                                        } else if responseManager.selectedSetId == set.id {
                                             Image(systemName: "checkmark")
                                                 .foregroundColor(.blue)
                                         }
                                     }
                                 }
+                                .disabled(!unlocked)
+                            }
+                        } header: {
+                            Text(category.rawValue)
+                        } footer: {
+                            if hasLocked {
+                                Text("🔒 bonus themes unlock as you collect rare shiny fortunes (you've found \(shinyCount)).")
                             }
                         }
                     }
