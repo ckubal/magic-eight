@@ -107,6 +107,12 @@ struct FortuneReceiptView: View {
             Text("ask again soon")
                 .font(.system(size: 10, weight: .regular, design: .monospaced))
                 .foregroundColor(ink.opacity(0.6))
+
+            // Barely-there maker's mark.
+            Text("a weird little idea · by charlie kubal")
+                .font(.system(size: 6, weight: .regular, design: .monospaced))
+                .foregroundColor(ink.opacity(0.3))
+                .padding(.top, 6)
         }
         .foregroundColor(ink)
         .padding(.vertical, 26)

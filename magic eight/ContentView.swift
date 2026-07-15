@@ -537,24 +537,44 @@ struct ContentView: View {
                 }
             }
 
-            // "Settle it" mode entry (bottom-left corner)
-            if !showIntroScreen && appState != .showingResponse {
-                GeometryReader { proxy in
-                    VStack {
+            // Bottom bar: "settle it" (always available) on the left, "share"
+            // (after a reveal) on the right. Plain layout so it respects the
+            // safe area and never overlaps the ball.
+            if !showIntroScreen {
+                VStack {
+                    Spacer()
+                    HStack(alignment: .bottom) {
+                        Button(action: {
+                            hapticGenerator.impactOccurred(intensity: 0.5)
+                            showSettleIt = true
+                        }) {
+                            HStack(spacing: 6) {
+                                Text("⚖️").font(.system(size: 14))
+                                Text("settle it")
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                            }
+                            .foregroundColor(.white.opacity(0.92))
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule()
+                                    .fill(Color.black.opacity(0.42))
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                            )
+                        }
+
                         Spacer()
-                        HStack {
-                            Button(action: {
-                                hapticGenerator.impactOccurred(intensity: 0.5)
-                                showSettleIt = true
-                            }) {
+
+                        if appState == .showingResponse && currentResponse != nil {
+                            Button(action: shareCurrentFortune) {
                                 HStack(spacing: 6) {
-                                    Text("⚖️")
-                                        .font(.system(size: 14))
-                                    Text("settle it")
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 13, weight: .bold))
+                                    Text("share")
                                         .font(.system(size: 13, weight: .bold, design: .rounded))
                                 }
                                 .foregroundColor(.white.opacity(0.92))
-                                .padding(.horizontal, 13)
+                                .padding(.horizontal, 16)
                                 .padding(.vertical, 9)
                                 .background(
                                     Capsule()
@@ -562,13 +582,14 @@ struct ContentView: View {
                                         .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
                                 )
                             }
-                            .padding(.leading, 16)
-                            Spacer()
+                            .opacity(responseOpacity)
+                            .transition(.opacity)
                         }
-                        .padding(.bottom, proxy.safeAreaInsets.bottom + 10)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
                 }
+                .zIndex(4)
             }
 
             // Sound on/off toggle — disabled while the sound feature is off.
@@ -631,50 +652,19 @@ struct ContentView: View {
                 .zIndex(7)
             }
 
-            // Post-reveal action: share the fortune receipt
-            if appState == .showingResponse && currentResponse != nil && !showIntroScreen {
-                GeometryReader { proxy in
-                    VStack {
-                        Spacer()
-                        Button(action: shareCurrentFortune) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 13, weight: .bold))
-                                Text("share")
-                                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                            }
-                            .foregroundColor(.white.opacity(0.92))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(
-                                Capsule()
-                                    .fill(Color.black.opacity(0.42))
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                            )
-                        }
-                        .padding(.bottom, proxy.safeAreaInsets.bottom + 22)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .opacity(responseOpacity)
-            }
-
-            // Rare "shiny" fortune celebration
+            // Rare "shiny" fortune celebration — confetti + a banner up top
+            // (clear of the ball answer and the bottom bar).
             if isShinyReveal && appState == .showingResponse && !showIntroScreen {
                 ShinyBurst()
                     .allowsHitTesting(false)
                     .transition(.opacity)
                     .zIndex(5)
                 VStack {
+                    Spacer().frame(height: 92)
+                    ShinyBanner(count: shinyCount)
                     Spacer()
-                    Text("✨ rare fortune  ·  #\(shinyCount) ✨")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
-                        .foregroundColor(Color(red: 1.0, green: 0.9, blue: 0.55))
-                        .shadow(color: .black.opacity(0.6), radius: 4, x: 0, y: 2)
-                        .padding(.bottom, 90)
                 }
                 .allowsHitTesting(false)
-                .transition(.opacity)
                 .zIndex(6)
             }
 
@@ -943,6 +933,13 @@ struct ContentView: View {
                     self.shinyCount += 1
                     self.haptics.playShiny()
                     // if self.soundEnabled { self.sound.playShiny() }  // sound feature disabled
+                    // A rising triple-buzz so a rare fortune is unmistakable.
+                    let g = self.hapticGenerator
+                    for (delay, strength) in [(0.10, 0.7), (0.24, 0.9), (0.40, 1.0)] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                            g.impactOccurred(intensity: strength)
+                        }
+                    }
                 } else {
                     self.haptics.play(for: self.responseManager.effectiveSetId)
                     // if self.soundEnabled { self.sound.play(for: self.responseManager.effectiveSetId) }  // sound feature disabled
@@ -1707,6 +1704,50 @@ struct TriangleWindow: View {
 }
 
 /// A one-shot golden sparkle burst shown when a rare "shiny" fortune appears.
+/// Celebratory banner for a rare "shiny" fortune — pops in with a spring.
+struct ShinyBanner: View {
+    let count: Int
+    @State private var shown = false
+    @State private var shimmer = false
+
+    private var gold: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.95, blue: 0.6),
+                Color(red: 1.0, green: 0.8, blue: 0.3),
+                Color(red: 1.0, green: 0.95, blue: 0.6),
+            ],
+            startPoint: shimmer ? .leading : .trailing,
+            endPoint: shimmer ? .trailing : .leading
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text("✨ rare fortune ✨")
+                .font(.system(size: 21, weight: .black, design: .rounded))
+                .foregroundStyle(gold)
+                .shadow(color: Color(red: 1, green: 0.7, blue: 0.1).opacity(0.6), radius: 8)
+            Text("one in a hundred · #\(count)")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundColor(.white.opacity(0.85))
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.55))
+                .overlay(Capsule().stroke(Color(red: 1, green: 0.85, blue: 0.4).opacity(0.8), lineWidth: 1.5))
+        )
+        .scaleEffect(shown ? 1.0 : 0.4)
+        .opacity(shown ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.5)) { shown = true }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { shimmer = true }
+        }
+    }
+}
+
 struct ShinyBurst: View {
     @State private var animate = false
     private let sparkleCount = 14
