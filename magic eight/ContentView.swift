@@ -1024,11 +1024,11 @@ struct ContentView: View {
         guard showIntroScreen else { return }
         guard introThemeCycler == nil else { return }
         
-        introThemeCycler = Timer.publish(every: 1.8, on: .main, in: .common)
+        introThemeCycler = Timer.publish(every: 4.0, on: .main, in: .common)
             .autoconnect()
             .sink { _ in
                 let nextTheme = randomThemeSetId(excluding: introBackgroundSetId)
-                withAnimation(.easeInOut(duration: 0.55)) {
+                withAnimation(.easeInOut(duration: 1.4)) {
                     introBackgroundSetId = nextTheme
                 }
             }
@@ -1316,10 +1316,14 @@ struct NostalgicIntroView: View {
     
     var body: some View {
         ZStack {
+            // Each era crossfades into the next (see the cycler in ContentView),
+            // while the whole thing slowly drifts (Ken Burns).
             ThemeWallpaperView(setId: cyclingThemeSetId)
                 .scaleEffect(backgroundScale * ThemeBackgroundLayout.motionOverscan)
                 .rotationEffect(.degrees(backgroundRotation))
                 .offset(backgroundOffset)
+                .id(cyclingThemeSetId)
+                .transition(.opacity)
                 .ignoresSafeArea()
             
             LinearGradient(
