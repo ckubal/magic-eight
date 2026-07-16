@@ -186,10 +186,14 @@ struct SettleItView: View {
                     let isWinner = (i == winnerIndex)
                     HStack(spacing: 10) {
                         numberBadge(i + 1, lit: isHighlighted || isWinner)
+                        Spacer(minLength: 6)
                         Text(option.lowercased())
                             .font(.system(size: 20, weight: .black, design: .rounded))
                             .foregroundColor(isHighlighted || isWinner ? .black : .white.opacity(0.85))
-                        Spacer(minLength: 0)
+                            .lineLimit(1)
+                        Spacer(minLength: 6)
+                        // Balance the number badge so the label is truly centered.
+                        Color.clear.frame(width: 30, height: 1)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
