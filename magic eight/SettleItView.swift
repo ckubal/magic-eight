@@ -14,6 +14,7 @@ import UIKit
 struct SettleItView: View {
     let themeSetId: String
     let haptics: HapticManager
+    @ObservedObject var motionManager: MotionManager
     let onClose: () -> Void
 
     private enum Stage { case input, deciding, verdict }
@@ -28,6 +29,8 @@ struct SettleItView: View {
     @State private var winnerPulse = false
     // Tally of wins per choice across "go again" rounds (same choices).
     @State private var winCounts: [String: Int] = [:]
+    // After the first run, a shake re-rolls.
+    @State private var canShakeRerun = false
     @FocusState private var focusedField: Int?
 
     private let tick = UIImpactFeedbackGenerator(style: .rigid)
@@ -95,6 +98,12 @@ struct SettleItView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { focusedField = nil }
+            .onReceive(motionManager.throttledShakeIntensity) { intensity in
+                // After a verdict, a shake re-rolls the same choices.
+                if intensity > 0.55, canShakeRerun, validOptions.count >= 2 {
+                    startDeciding()
+                }
+            }
         }
     }
 
@@ -326,6 +335,10 @@ struct SettleItView: View {
                         }
                     }
                 }
+
+                Text("🎲 or shake to go again")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.6))
             }
         }
     }
@@ -384,6 +397,7 @@ struct SettleItView: View {
         focusedField = nil
         winnerIndex = nil
         winnerPulse = false
+        canShakeRerun = false
         spotlight = 0
 
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { stage = .deciding }
@@ -432,6 +446,10 @@ struct SettleItView: View {
             }
             burstTrigger += 1
             haptics.playShiny()
+            // Arm shake-to-rerun once the verdict has settled.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if stage == .verdict { canShakeRerun = true }
+            }
         }
     }
 }

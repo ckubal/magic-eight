@@ -697,7 +697,8 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showSettleIt) {
             SettleItView(
                 themeSetId: responseManager.effectiveSetId,
-                haptics: haptics
+                haptics: haptics,
+                motionManager: motionManager
             ) {
                 showSettleIt = false
             }
@@ -705,6 +706,8 @@ struct ContentView: View {
         .onChange(of: motionManager.isFaceDown) { _, isFaceDown in
             let wasFaceDown = previousFaceDownState
             previousFaceDownState = isFaceDown
+            // Don't reveal a fortune behind the settle-it cover.
+            guard !showSettleIt else { return }
             handleOrientationChange(wasFaceDown: wasFaceDown, isFaceDown: isFaceDown)
         }
         .onReceive(motionManager.throttledShakeIntensity) { intensity in
