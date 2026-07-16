@@ -29,8 +29,9 @@ struct SettleItView: View {
     @State private var winnerPulse = false
     // Tally of wins per choice across "go again" rounds (same choices).
     @State private var winCounts: [String: Int] = [:]
-    // After the first run, a shake re-rolls.
+    // After the first run, a sustained shake re-rolls.
     @State private var canShakeRerun = false
+    @State private var shakeAccum: Double = 0
     @FocusState private var focusedField: Int?
 
     private let tick = UIImpactFeedbackGenerator(style: .rigid)
@@ -99,9 +100,21 @@ struct SettleItView: View {
             .contentShape(Rectangle())
             .onTapGesture { focusedField = nil }
             .onReceive(motionManager.throttledShakeIntensity) { intensity in
-                // After a verdict, a shake re-rolls the same choices.
-                if intensity > 0.55, canShakeRerun, validOptions.count >= 2 {
-                    startDeciding()
+                // Re-roll only on a *sustained*, vigorous shake — never on a
+                // single bump or lifting the phone. Accumulate ~0.05s per tick
+                // while shaking hard; a stop decays it fast.
+                guard canShakeRerun, validOptions.count >= 2 else {
+                    shakeAccum = 0
+                    return
+                }
+                if intensity > 0.8 {
+                    shakeAccum += 0.05
+                    if shakeAccum >= 0.75 {   // ~0.75s of real shaking
+                        shakeAccum = 0
+                        startDeciding()
+                    }
+                } else {
+                    shakeAccum *= 0.5
                 }
             }
         }
@@ -190,7 +203,10 @@ struct SettleItView: View {
                         Text(option.lowercased())
                             .font(.system(size: 20, weight: .black, design: .rounded))
                             .foregroundColor(isHighlighted || isWinner ? .black : .white.opacity(0.85))
-                            .lineLimit(1)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.6)
+                            .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 6)
                         // Balance the number badge so the label is truly centered.
                         Color.clear.frame(width: 30, height: 1)
@@ -357,6 +373,8 @@ struct SettleItView: View {
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white.opacity(0.9))
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 130, alignment: .leading)
                         Text("\(entry.wins)")
                             .font(.system(size: 14, weight: .black, design: .rounded))
                             .foregroundColor(Color(red: 1.0, green: 0.85, blue: 0.35))
@@ -402,6 +420,7 @@ struct SettleItView: View {
         winnerIndex = nil
         winnerPulse = false
         canShakeRerun = false
+        shakeAccum = 0
         spotlight = 0
 
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { stage = .deciding }
