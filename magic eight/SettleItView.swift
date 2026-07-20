@@ -107,7 +107,7 @@ struct SettleItView: View {
                     shakeAccum = 0
                     return
                 }
-                if intensity > 0.8 {
+                if intensity > 0.9 {
                     shakeAccum += 0.05
                     if shakeAccum >= 0.75 {   // ~0.75s of real shaking
                         shakeAccum = 0
